@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Remote Control — Commands</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--card2:#1c2128;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--amber:#d29922;--red:#f85149;--purple:#a371f7}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:200px;background:var(--card);border-right:1px solid var(--border);padding:12px 0;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.sb-brand{padding:0 12px 12px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.sb-brand h2{font-size:.9rem;font-weight:600}
+.sb-brand small{color:var(--muted);font-size:.72rem}
+.sb-lbl{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:8px 12px 3px}
+.sidebar a{display:flex;align-items:center;gap:6px;padding:5px 12px;color:var(--muted);text-decoration:none;font-size:.82rem;border-left:2px solid transparent;transition:all .12s}
+.sidebar a:hover,.sidebar a.active{color:var(--accent);border-left-color:var(--accent);background:#58a6ff08}
+.cnt{margin-left:auto;font-size:.65rem;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:1px 5px;color:var(--muted)}
+.main{flex:1;padding:32px 40px;max-width:860px}
+.hero{margin-bottom:28px}
+.hero h1{font-size:1.8rem;font-weight:700;margin-bottom:5px}
+.hero p{color:var(--muted);font-size:.9rem;margin-bottom:10px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-size:.7rem;padding:2px 8px;border-radius:20px;border:1px solid}
+.tb{color:var(--accent);border-color:#58a6ff40;background:#58a6ff0d}
+.tg{color:var(--green);border-color:#3fb95040;background:#3fb9500d}
+.tp{color:var(--purple);border-color:#a371f740;background:#a371f70d}
+.ta{color:var(--amber);border-color:#d2992240;background:#d299220d}
+.tr{color:var(--red);border-color:#f8514940;background:#f851490d}
+.sw{position:relative;margin-bottom:24px}
+.sw input{width:100%;padding:10px 14px 10px 40px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:.9rem;outline:none;transition:border-color .2s}
+.sw input:focus{border-color:var(--accent)}
+.sw .si{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+#sc{color:var(--muted);font-size:.78rem;margin-top:4px;min-height:16px}
+.section{margin-bottom:40px}
+.sh{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.si2{font-size:1.2rem}
+.st{font-size:1rem;font-weight:600}
+.sn{font-size:.68rem;color:var(--muted);background:var(--card2);border:1px solid var(--border);padding:2px 6px;border-radius:20px}
+.cc{background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;transition:border-color .15s}
+.cc:hover{border-color:#58a6ff40}
+.ch{display:flex;align-items:center;gap:9px;padding:11px 13px;cursor:pointer;user-select:none}
+.cn{font-family:'SF Mono',Consolas,monospace;font-size:.88rem;font-weight:600;color:var(--accent);white-space:nowrap}
+.cd{color:var(--muted);font-size:.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ca{color:var(--muted);font-size:.72rem;transition:transform .18s;flex-shrink:0}
+.cc.open .ca{transform:rotate(90deg)}
+.cb{display:none;padding:0 13px 13px;border-top:1px solid var(--border)20}
+.cc.open .cb{display:block}
+.cl{font-size:.66rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-top:11px;margin-bottom:4px}
+.code{background:#010409;border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-family:'SF Mono',Consolas,monospace;font-size:.8rem;overflow-x:auto;line-height:1.75}
+.kw{color:var(--amber)} .arg{color:var(--green)} .cmt{color:var(--muted);font-style:italic} .out{color:#c9d1d9}
+.eg{margin-bottom:6px}
+.tip{background:#58a6ff0d;border:1px solid #58a6ff25;border-radius:6px;padding:8px 12px;font-size:.8rem;color:#c9d1d9;margin-top:8px}
+.tip b{color:var(--accent)}
+.warn{background:#d299220d;border-color:#d2992225}
+.warn b{color:var(--amber)}
+.nb{font-size:.62rem;padding:1px 5px;border-radius:9px;background:#3fb95018;color:var(--green);border:1px solid #3fb95035;margin-left:5px;vertical-align:middle;white-space:nowrap}
+.kb{font-size:.62rem;padding:1px 5px;border-radius:9px;background:#58a6ff18;color:var(--accent);border:1px solid #58a6ff35;margin-left:5px;vertical-align:middle;white-space:nowrap}
+.rtbl{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:6px}
+.rtbl th{text-align:left;padding:6px 9px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:.68rem;text-transform:uppercase}
+.rtbl td{padding:6px 9px;border-bottom:1px solid var(--border)35;vertical-align:top}
+.rtbl tr:last-child td{border:none}
+.rtbl code{font-family:'SF Mono',Consolas,monospace;color:var(--accent);background:#58a6ff0f;padding:1px 4px;border-radius:3px;font-size:.77rem}
+.hidden{display:none!important}
+@media(max-width:660px){.sidebar{display:none}.main{padding:14px}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+  <div class="sb-brand"><h2>🖥 Remote Control</h2><small>82 commands</small></div>
+  <div class="sb-lbl">Navigation</div>
+  <a href="#how">📖 How to use</a>
+  <a href="#config">⚙️ Config / Server <span class="cnt">4</span></a>
+  <a href="#screenshot">📸 Screenshot <span class="cnt">4</span></a>
+  <a href="#mouse">🖱 Mouse <span class="cnt">5</span></a>
+  <a href="#keyboard">⌨️ Keyboard <span class="cnt">3</span></a>
+  <a href="#files">📁 Files <span class="cnt">13</span></a>
+  <a href="#shell">💻 Shell <span class="cnt">3</span></a>
+  <a href="#system">📊 System <span class="cnt">12</span></a>
+  <a href="#power">⚡ Power & Apps <span class="cnt">10</span></a>
+  <a href="#clipboard">📋 Clipboard <span class="cnt">4</span></a>
+  <a href="#notify">🔔 Notify & Audio <span class="cnt">5</span></a>
+  <a href="#network">🌐 Network <span class="cnt">5</span></a>
+  <a href="#advanced">🔧 Advanced <span class="cnt">8</span></a>
+  <a href="#startup">🚀 Startup <span class="cnt">2</span></a>
+  <a href="#cheat">⚡ Cheat Sheet</a>
+</nav>
+<main class="main">
+
+<div class="hero">
+  <h1>🖥 Remote Control</h1>
+  <p>Full command reference. Send from Telegram or the Admin Panel.</p>
+  <div class="tags">
+    <span class="tag tb">82 commands</span>
+    <span class="tag tg">Russian / Unicode typing fixed</span>
+    <span class="tag tp">Server hot-swap</span>
+    <span class="tag ta">Windows optimised</span>
+    <span class="tag tr">New: speak, battery, wallpaper…</span>
+  </div>
+</div>
+
+<div class="sw">
+  <span class="si">🔍</span>
+  <input id="q" type="text" placeholder="Search… e.g. screenshot, russian, server, shutdown" oninput="doSearch(this.value)">
+</div>
+<div id="sc"></div>
+
+<!-- HOW TO -->
+<div class="section" id="how">
+  <div class="sh"><span class="si2">📖</span><span class="st">How to send commands</span></div>
+  <div class="tip"><b>From Telegram (Admin):</b><div class="code" style="margin-top:6px">/send <span class="kw">script1</span> <span class="arg">command arguments</span></div></div>
+  <div class="tip" style="margin-top:7px"><b>Broadcast to ALL PCs:</b><div class="code" style="margin-top:6px">/broadcast <span class="arg">status</span></div></div>
+  <div class="tip warn" style="margin-top:7px"><b>⚡ Intercept:</b> Override the next command sent to a script:<div class="code" style="margin-top:6px">/intercept script1 <span class="arg">lock</span></div></div>
+</div>
+
+<!-- CONFIG -->
+<div class="section" id="config">
+  <div class="sh"><span class="si2">⚙️</span><span class="st">Config & Server Switching</span><span class="sn">4</span></div>
+  <p style="color:var(--muted);font-size:.82rem;margin-bottom:10px">Change server, name, or secret key without rebuilding the exe — just send a command.</p>
+
+  <div class="cc" data-s="update server url railway switch move account wss">
+    <div class="ch" onclick="tog(this)"><span class="cn">update_server</span><span class="kb">KEY</span><span class="cd">Change server URL without rebuilding — works even mid-switch</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">update_server</span> <span class="arg">wss://new-app.up.railway.app/ws</span></div>
+      <div class="cl">Switching Railway accounts</div>
+      <div class="code eg">/send script1 <span class="kw">update_server</span> <span class="arg">wss://my-new-server.up.railway.app/ws</span></div>
+      <div class="tip"><b>How it works:</b> Saves the new URL to config.json immediately. The script reconnects to the new server automatically. Send this command on the OLD server before you shut it down — scripts will follow you to the new one.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="update secret key password change">
+    <div class="ch" onclick="tog(this)"><span class="cn">update_secret</span><span class="nb">NEW</span><span class="cd">Change the secret key without rebuilding</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">update_secret</span> <span class="arg">NewSecretKey123</span></div>
+      <div class="tip warn"><b>⚠️</b> Update the server env variable at the same time, or the script won't reconnect.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="update name rename pc computer script">
+    <div class="ch" onclick="tog(this)"><span class="cn">update_name</span><span class="nb">NEW</span><span class="cd">Rename this PC without rebuilding</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">update_name</span> <span class="arg">brothers_gaming_pc</span></div>
+      <div class="tip">Saved to config.json. Restart the app to reconnect with the new name.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="show config current settings server url name">
+    <div class="ch" onclick="tog(this)"><span class="cn">show_config</span><span class="nb">NEW</span><span class="cd">Show current server URL, PC name, secret key</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">show_config</span></div>
+      <div class="cl">Response</div>
+      <div class="code out">Config: C:\RemoteControl\config.json
+PC name   : brothers_pc
+Server URL: wss://my-app.up.railway.app/ws
+Secret key: ******** (8 chars)</div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREENSHOT -->
+<div class="section" id="screenshot">
+  <div class="sh"><span class="si2">📸</span><span class="st">Screenshot & Screen</span><span class="sn">4</span></div>
+
+  <div class="cc" data-s="screenshot screen capture photo picture grab pyautogui">
+    <div class="ch" onclick="tog(this)"><span class="cn">screenshot</span><span class="kb">FIXED</span><span class="cd">Take a full screenshot — sent as photo directly in Telegram</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">screenshot</span></div>
+      <div class="tip"><b>Now uses pyautogui.screenshot()</b> — saves to temp file, sends as a real photo in Telegram chat. No link, no expiry.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="screenshot region area crop partial portion x y width height">
+    <div class="ch" onclick="tog(this)"><span class="cn">screenshot_region</span><span class="cd">Screenshot a specific area of the screen</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">screenshot_region</span> <span class="arg">x y width height</span></div>
+      <div class="code eg">/send script1 <span class="kw">screenshot_region</span> <span class="arg">0 0 960 540</span>  <span class="cmt">← top-left quarter of 1080p</span></div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="screen size resolution width height pixels display">
+    <div class="ch" onclick="tog(this)"><span class="cn">screen_size</span><span class="cd">Get screen resolution</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">screen_size</span></div><div class="cl">Response</div><div class="code out">Screen: 1920x1080</div></div>
+  </div>
+
+  <div class="cc" data-s="clipboard image screenshot printscreen copy picture upload">
+    <div class="ch" onclick="tog(this)"><span class="cn">clipboard_image</span><span class="cd">Upload the image currently in the clipboard</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">clipboard_image</span></div><div class="tip">If user pressed <b>PrintScreen</b>, this uploads it instantly.</div></div>
+  </div>
+</div>
+
+<!-- MOUSE -->
+<div class="section" id="mouse">
+  <div class="sh"><span class="si2">🖱</span><span class="st">Mouse Control</span><span class="sn">5</span></div>
+
+  <div class="cc" data-s="mouse move cursor position coordinates xy">
+    <div class="ch" onclick="tog(this)"><span class="cn">mouse_move</span><span class="cd">Move cursor to coordinates</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">mouse_move</span> <span class="arg">x y</span></div><div class="code eg">/send script1 <span class="kw">mouse_move</span> <span class="arg">960 540</span>  <span class="cmt">← center of 1080p</span></div></div>
+  </div>
+
+  <div class="cc" data-s="mouse click left right double button press tap">
+    <div class="ch" onclick="tog(this)"><span class="cn">mouse_click</span><span class="cd">Click — left, right, or double</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">mouse_click</span> <span class="arg">[x y] [left|right|double]</span></div>
+      <div class="code eg">/send script1 <span class="kw">mouse_click</span> <span class="arg">500 300 right</span>   <span class="cmt">← right click</span></div>
+      <div class="code eg">/send script1 <span class="kw">mouse_click</span> <span class="arg">500 300 double</span>  <span class="cmt">← open file</span></div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="mouse scroll wheel up down page"><div class="ch" onclick="tog(this)"><span class="cn">mouse_scroll</span><span class="cd">Scroll up (positive) or down (negative)</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">mouse_scroll</span> <span class="arg">5</span>   <span class="cmt">↑ up</span>&#10;<span class="kw">mouse_scroll</span> <span class="arg">-5</span>  <span class="cmt">↓ down</span></div></div></div>
+  <div class="cc" data-s="mouse position where cursor location"><div class="ch" onclick="tog(this)"><span class="cn">mouse_pos</span><span class="cd">Get current cursor position</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">mouse_pos</span></div><div class="cl">Response</div><div class="code out">Mouse: x=742, y=391</div></div></div>
+  <div class="cc" data-s="mouse drag drop hold move window file"><div class="ch" onclick="tog(this)"><span class="cn">mouse_drag</span><span class="cd">Click and drag from one point to another</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">mouse_drag</span> <span class="arg">x1 y1 x2 y2</span></div></div></div>
+</div>
+
+<!-- KEYBOARD -->
+<div class="section" id="keyboard">
+  <div class="sh"><span class="si2">⌨️</span><span class="st">Keyboard Control</span><span class="sn">3</span></div>
+
+  <div class="cc" data-s="type text write input keyboard russian cyrillic arabic unicode language chinese">
+    <div class="ch" onclick="tog(this)"><span class="cn">type_text</span><span class="kb">FIXED</span><span class="cd">Type in ANY language — Russian, Arabic, Chinese, etc.</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">type_text</span> <span class="arg">text in any language</span></div>
+      <div class="cl">All languages work</div>
+      <div class="code eg">/send script1 <span class="kw">type_text</span> <span class="arg">Hello World</span>       <span class="cmt">← English</span></div>
+      <div class="code eg">/send script1 <span class="kw">type_text</span> <span class="arg">Привет мир</span>       <span class="cmt">← Russian ✓</span></div>
+      <div class="code eg">/send script1 <span class="kw">type_text</span> <span class="arg">مرحبا بالعالم</span>     <span class="cmt">← Arabic ✓</span></div>
+      <div class="code eg">/send script1 <span class="kw">type_text</span> <span class="arg">你好世界</span>          <span class="cmt">← Chinese ✓</span></div>
+      <div class="tip"><b>Why it now works:</b> pyautogui.write() only handles ASCII. The fix puts text in the clipboard and pastes with Ctrl+V — works for every language.</div>
+      <div class="tip warn"><b>⚠️</b> Click the text field first with <code>mouse_click</code>, then use <code>type_text</code>.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="hotkey shortcut key combo ctrl alt win copy paste undo save close">
+    <div class="ch" onclick="tog(this)"><span class="cn">hotkey</span><span class="cd">Press keyboard shortcuts</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">hotkey</span> <span class="arg">key1 key2 ...</span></div>
+      <table class="rtbl">
+        <tr><th>Command</th><th>Action</th></tr>
+        <tr><td><code>hotkey ctrl c</code></td><td>Copy</td></tr>
+        <tr><td><code>hotkey ctrl v</code></td><td>Paste</td></tr>
+        <tr><td><code>hotkey ctrl z</code></td><td>Undo</td></tr>
+        <tr><td><code>hotkey alt f4</code></td><td>Close window</td></tr>
+        <tr><td><code>hotkey win d</code></td><td>Show desktop</td></tr>
+        <tr><td><code>hotkey win l</code></td><td>Lock screen</td></tr>
+        <tr><td><code>hotkey ctrl shift esc</code></td><td>Task Manager</td></tr>
+        <tr><td><code>hotkey win r</code></td><td>Run dialog</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="cc" data-s="press key enter escape space f5 tab backspace arrow single">
+    <div class="ch" onclick="tog(this)"><span class="cn">press_key</span><span class="cd">Press a single key</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Common keys</div><div class="code">enter  escape  space  tab  backspace  delete&#10;f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12&#10;up  down  left  right  home  end  pageup  pagedown</div></div>
+  </div>
+</div>
+
+<!-- FILES -->
+<div class="section" id="files">
+  <div class="sh"><span class="si2">📁</span><span class="st">File Manager</span><span class="sn">13</span></div>
+
+  <div class="cc" data-s="ls list files directory folder contents"><div class="ch" onclick="tog(this)"><span class="cn">ls</span><span class="cd">List files in a directory</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">ls</span> <span class="arg">[path]</span>  <span class="cmt">default: current dir</span></div><div class="code eg">/send script1 <span class="kw">ls</span> <span class="arg">C:\Users\John\Desktop</span></div></div></div>
+  <div class="cc" data-s="read file open view text content cat show"><div class="ch" onclick="tog(this)"><span class="cn">read_file</span><span class="cd">Read a text file (max 100 KB)</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">read_file</span> <span class="arg">C:\path\file.txt</span></div></div></div>
+  <div class="cc" data-s="write file create save text content push make"><div class="ch" onclick="tog(this)"><span class="cn">write_file</span><span class="cd">Write text to a file</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">write_file</span> <span class="arg">C:\file.txt</span> | <span class="arg">content here</span></div><div class="tip warn"><b>⚠️</b> The <b>|</b> separator is required.</div></div></div>
+  <div class="cc" data-s="download file upload link get retrieve send share"><div class="ch" onclick="tog(this)"><span class="cn">download_file</span><span class="cd">Upload a PC file so you can download it</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">download_file</span> <span class="arg">C:\report.pdf</span></div><div class="tip">Returns a temporary download link (expires 1 day). Max 20 MB.</div></div></div>
+  <div class="cc" data-s="delete remove file folder permanent trash"><div class="ch" onclick="tog(this)"><span class="cn">delete_file</span><span class="cd">Delete a file or folder permanently</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">delete_file</span> <span class="arg">C:\path\file.txt</span></div><div class="tip warn"><b>⚠️ Permanent.</b> No recycle bin.</div></div></div>
+  <div class="cc" data-s="copy file duplicate backup"><div class="ch" onclick="tog(this)"><span class="cn">copy_file</span><span class="cd">Copy a file to another location</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">copy_file</span> <span class="arg">C:\src.txt</span> | <span class="arg">D:\dst.txt</span></div></div></div>
+  <div class="cc" data-s="move file rename relocate mv"><div class="ch" onclick="tog(this)"><span class="cn">move_file</span><span class="cd">Move or rename a file</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">move_file</span> <span class="arg">C:\old.txt</span> | <span class="arg">C:\new_name.txt</span></div></div></div>
+  <div class="cc" data-s="find search file locate pattern wildcard glob"><div class="ch" onclick="tog(this)"><span class="cn">find_file</span><span class="cd">Search files by name pattern</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">find_file</span> <span class="arg">*.pdf</span> <span class="arg">C:\Users</span></div></div></div>
+  <div class="cc" data-s="zip compress folder archive pack bundle"><div class="ch" onclick="tog(this)"><span class="cn">zip_folder</span><span class="cd">Compress a folder into .zip</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">zip_folder</span> <span class="arg">C:\myfolder</span></div><div class="tip">Creates myfolder.zip next to the folder. Then use download_file to get it.</div></div></div>
+  <div class="cc" data-s="mkdir make create folder directory new"><div class="ch" onclick="tog(this)"><span class="cn">mkdir</span><span class="cd">Create a new folder</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">mkdir</span> <span class="arg">C:\NewFolder</span></div></div></div>
+  <div class="cc" data-s="pwd current directory where location"><div class="ch" onclick="tog(this)"><span class="cn">pwd</span><span class="cd">Show current directory</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">pwd</span></div></div></div>
+  <div class="cc" data-s="cd change navigate directory folder go"><div class="ch" onclick="tog(this)"><span class="cn">cd</span><span class="cd">Change working directory</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">cd</span> <span class="arg">C:\Users\John</span></div></div></div>
+  <div class="cc" data-s="recent files opened history last documents windows">
+    <div class="ch" onclick="tog(this)"><span class="cn">recent_files</span><span class="nb">NEW</span><span class="cd">List recently opened files</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">recent_files</span></div><div class="tip">Shows last 20 files from Windows Recent folder.</div></div>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div class="section" id="shell">
+  <div class="sh"><span class="si2">💻</span><span class="st">Shell / Terminal</span><span class="sn">3</span></div>
+
+  <div class="cc" data-s="shell command run execute cmd terminal bat">
+    <div class="ch" onclick="tog(this)"><span class="cn">shell</span><span class="cd">Run any Windows CMD command</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">shell</span> <span class="arg">command</span></div>
+      <table class="rtbl">
+        <tr><th>Example</th><th>What it does</th></tr>
+        <tr><td><code>shell ipconfig /all</code></td><td>Full network info + MAC address</td></tr>
+        <tr><td><code>shell tasklist</code></td><td>All running processes</td></tr>
+        <tr><td><code>shell systeminfo</code></td><td>Full system information</td></tr>
+        <tr><td><code>shell netstat -an</code></td><td>Open ports and connections</td></tr>
+        <tr><td><code>shell wmic cpu get name</code></td><td>CPU model name</td></tr>
+        <tr><td><code>shell dir C:\Users</code></td><td>List folder contents</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="cc" data-s="powershell ps advanced windows command powerful">
+    <div class="ch" onclick="tog(this)"><span class="cn">powershell</span><span class="cd">Run PowerShell (more powerful than CMD)</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">powershell</span> <span class="arg">command</span></div>
+      <div class="code eg">/send script1 <span class="kw">powershell</span> <span class="arg">Get-Process | Sort CPU -Desc | Select -First 10</span></div>
+      <div class="code eg">/send script1 <span class="kw">powershell</span> <span class="arg">Get-Service | Where Status -eq Running</span></div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="run script python file execute code py"><div class="ch" onclick="tog(this)"><span class="cn">run_script</span><span class="cd">Execute a Python .py file on the PC</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">run_script</span> <span class="arg">C:\myscript.py</span></div></div></div>
+</div>
+
+<!-- SYSTEM -->
+<div class="section" id="system">
+  <div class="sh"><span class="si2">📊</span><span class="st">System Monitor</span><span class="sn">12</span></div>
+
+  <div class="cc" data-s="status overview all info summary health"><div class="ch" onclick="tog(this)"><span class="cn">status</span><span class="cd">Full system overview — OS, CPU, RAM, disk, IP, uptime</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">status</span></div><div class="cl">Response</div><div class="code out">=== brothers_pc ===&#10;Time  : 2025-06-14 18:32:01&#10;CPU   : 12% (8 cores)&#10;RAM   : 4,321 MB / 16,384 MB (26.3%)&#10;Disk  : 128.4 GB / 512.0 GB (25.1%)&#10;Uptime: 2:14:33</div></div></div>
+  <div class="cc" data-s="cpu processor usage cores frequency load"><div class="ch" onclick="tog(this)"><span class="cn">cpu</span><span class="cd">CPU usage per core with bar chart</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">cpu</span></div></div></div>
+  <div class="cc" data-s="ram memory usage available total swap"><div class="ch" onclick="tog(this)"><span class="cn">ram</span><span class="cd">RAM and swap memory usage</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">ram</span></div></div></div>
+  <div class="cc" data-s="disk drive storage space hard ssd usage all drives"><div class="ch" onclick="tog(this)"><span class="cn">disk</span><span class="cd">Disk usage for all drives</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">disk</span></div></div></div>
+  <div class="cc" data-s="processes list running task manager top cpu hog"><div class="ch" onclick="tog(this)"><span class="cn">processes</span><span class="cd">Top running processes by CPU</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">processes</span> <span class="arg">[count]</span>  <span class="cmt">default 15</span></div></div></div>
+  <div class="cc" data-s="kill process terminate stop force close pid name"><div class="ch" onclick="tog(this)"><span class="cn">kill_process</span><span class="cd">Force-kill a process by PID or name</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">kill_process</span> <span class="arg">chrome.exe</span>&#10;<span class="kw">kill_process</span> <span class="arg">1234</span>  <span class="cmt">← by PID</span></div></div></div>
+  <div class="cc" data-s="network stats bytes sent received packets interfaces ip"><div class="ch" onclick="tog(this)"><span class="cn">network</span><span class="cd">Network stats and interface IPs</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">network</span></div></div></div>
+  <div class="cc" data-s="connections open ports tcp active sockets listen established"><div class="ch" onclick="tog(this)"><span class="cn">connections</span><span class="cd">Active TCP connections and open ports</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">connections</span></div></div></div>
+  <div class="cc" data-s="uptime boot since how long running"><div class="ch" onclick="tog(this)"><span class="cn">uptime</span><span class="cd">How long the PC has been running</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">uptime</span></div></div></div>
+  <div class="cc" data-s="battery laptop charge level plugged status power">
+    <div class="ch" onclick="tog(this)"><span class="cn">battery</span><span class="nb">NEW</span><span class="cd">Battery status for laptops</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">battery</span></div><div class="cl">Response</div><div class="code out">Battery: 74%&#10;Status : On battery&#10;Time   : 3h 12m</div></div>
+  </div>
+  <div class="cc" data-s="sysinfo system information detailed hardware full"><div class="ch" onclick="tog(this)"><span class="cn">sysinfo</span><span class="cd">Full system information (runs systeminfo)</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">sysinfo</span></div></div></div>
+  <div class="cc" data-s="temp temperature cpu gpu hardware sensor degrees"><div class="ch" onclick="tog(this)"><span class="cn">temp</span><span class="cd">Hardware temperatures (if sensors available)</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">temp</span></div></div></div>
+</div>
+
+<!-- POWER -->
+<div class="section" id="power">
+  <div class="sh"><span class="si2">⚡</span><span class="st">Power & App Control</span><span class="sn">10</span></div>
+
+  <div class="cc" data-s="shutdown turn off pc power down"><div class="ch" onclick="tog(this)"><span class="cn">shutdown</span><span class="cd">Shut down the PC (with countdown)</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">shutdown</span> <span class="arg">[seconds=30]</span></div><div class="code eg">/send script1 <span class="kw">shutdown</span> <span class="arg">0</span>  <span class="cmt">← immediately</span></div><div class="tip">Use <code>cancel_shutdown</code> to abort.</div></div></div>
+  <div class="cc" data-s="restart reboot pc"><div class="ch" onclick="tog(this)"><span class="cn">restart</span><span class="cd">Restart the PC</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">restart</span> <span class="arg">[seconds=30]</span></div></div></div>
+  <div class="cc" data-s="cancel abort shutdown restart stop"><div class="ch" onclick="tog(this)"><span class="cn">cancel_shutdown</span><span class="cd">Cancel a pending shutdown or restart</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">cancel_shutdown</span></div></div></div>
+  <div class="cc" data-s="sleep suspend hibernate power save"><div class="ch" onclick="tog(this)"><span class="cn">sleep</span><span class="cd">Put PC to sleep</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">sleep</span></div></div></div>
+  <div class="cc" data-s="lock screen secure password workstation"><div class="ch" onclick="tog(this)"><span class="cn">lock</span><span class="cd">Lock the screen</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">lock</span></div></div></div>
+  <div class="cc" data-s="open app launch start program exe file"><div class="ch" onclick="tog(this)"><span class="cn">open_app</span><span class="cd">Open any application or file</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">open_app</span> <span class="arg">notepad.exe</span>&#10;<span class="kw">open_app</span> <span class="arg">C:\doc.pdf</span></div></div></div>
+  <div class="cc" data-s="open url browser website link internet web">
+    <div class="ch" onclick="tog(this)"><span class="cn">open_url</span><span class="nb">NEW</span><span class="cd">Open a URL in the default browser</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">open_url</span> <span class="arg">https://google.com</span></div></div>
+  </div>
+  <div class="cc" data-s="schedule task time timer auto command later night">
+    <div class="ch" onclick="tog(this)"><span class="cn">schedule_task</span><span class="cd">Schedule a command at a specific time today</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">schedule_task</span> <span class="arg">HH:MM command</span></div><div class="code eg">/send script1 <span class="kw">schedule_task</span> <span class="arg">22:00 shutdown</span>  <span class="cmt">← shutdown at 10pm</span></div></div>
+  </div>
+  <div class="cc" data-s="close all apps windows minimize clear desktop">
+    <div class="ch" onclick="tog(this)"><span class="cn">close_all_apps</span><span class="nb">NEW</span><span class="cd">Close all open application windows</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">close_all_apps</span></div></div>
+  </div>
+  <div class="cc" data-s="show desktop minimize win d windows all">
+    <div class="ch" onclick="tog(this)"><span class="cn">show_desktop</span><span class="nb">NEW</span><span class="cd">Minimise all windows, show desktop</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">show_desktop</span></div></div>
+  </div>
+</div>
+
+<!-- CLIPBOARD -->
+<div class="section" id="clipboard">
+  <div class="sh"><span class="si2">📋</span><span class="st">Clipboard</span><span class="sn">4</span></div>
+  <div class="cc" data-s="clipboard get read paste content text copied"><div class="ch" onclick="tog(this)"><span class="cn">clipboard_get</span><span class="cd">Read what is in the clipboard</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">clipboard_get</span></div><div class="tip">Great for reading passwords or text the user just copied.</div></div></div>
+  <div class="cc" data-s="clipboard set write copy text put send paste"><div class="ch" onclick="tog(this)"><span class="cn">clipboard_set</span><span class="cd">Set clipboard text — user can Ctrl+V</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">clipboard_set</span> <span class="arg">Hello from remote!</span></div></div></div>
+  <div class="cc" data-s="clipboard image screenshot printscreen picture upload"><div class="ch" onclick="tog(this)"><span class="cn">clipboard_image</span><span class="cd">Upload the image from clipboard</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">clipboard_image</span></div></div></div>
+  <div class="cc" data-s="clipboard history previous items windows 10 win v">
+    <div class="ch" onclick="tog(this)"><span class="cn">clipboard_history</span><span class="nb">NEW</span><span class="cd">Get clipboard history (Windows 10+)</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">clipboard_history</span></div><div class="tip">Requires clipboard history enabled in Windows Settings (Win+V).</div></div>
+  </div>
+</div>
+
+<!-- NOTIFY -->
+<div class="section" id="notify">
+  <div class="sh"><span class="si2">🔔</span><span class="st">Notifications & Audio</span><span class="sn">5</span></div>
+
+  <div class="cc" data-s="notify notification toast popup bubble message alert banner"><div class="ch" onclick="tog(this)"><span class="cn">notify</span><span class="cd">Show a Windows notification (non-blocking)</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">notify</span> <span class="arg">Time for a break!</span></div><div class="tip">Appears in bottom-right. Disappears after a few seconds.</div></div></div>
+  <div class="cc" data-s="msgbox message box dialog popup blocking must click ok"><div class="ch" onclick="tog(this)"><span class="cn">msgbox</span><span class="cd">Show a popup the user must click OK to close</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">msgbox</span> <span class="arg">Are you there?</span></div><div class="tip warn"><b>⚠️</b> Blocks the user's window until they click OK.</div></div></div>
+
+  <div class="cc" data-s="speak text speech tts voice talk say aloud text-to-speech">
+    <div class="ch" onclick="tog(this)"><span class="cn">speak</span><span class="nb">NEW</span><span class="cd">Make the PC speak text aloud (text-to-speech)</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">speak</span> <span class="arg">text to say</span></div>
+      <div class="code eg">/send script1 <span class="kw">speak</span> <span class="arg">Please close your browser and do your homework</span></div>
+      <div class="code eg">/send script1 <span class="kw">speak</span> <span class="arg">Hello I am watching you</span></div>
+      <div class="tip">Uses Windows built-in text-to-speech — no extra install needed. Works immediately.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="volume audio sound mute speaker loud quiet level set"><div class="ch" onclick="tog(this)"><span class="cn">volume</span><span class="cd">Set system volume or mute/unmute</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">volume</span> <span class="arg">50</span>      <span class="cmt">← set 50%</span>&#10;<span class="kw">volume</span> <span class="arg">mute</span>    <span class="cmt">← mute</span>&#10;<span class="kw">volume</span> <span class="arg">unmute</span>  <span class="cmt">← unmute</span></div></div></div>
+  <div class="cc" data-s="beep sound play audio alert ding noise"><div class="ch" onclick="tog(this)"><span class="cn">play_sound</span><span class="cd">Play a beep / alert sound</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">play_sound</span></div></div></div>
+</div>
+
+<!-- NETWORK -->
+<div class="section" id="network">
+  <div class="sh"><span class="si2">🌐</span><span class="st">Network Utilities</span><span class="sn">5</span></div>
+  <div class="cc" data-s="ping host latency test connection check internet"><div class="ch" onclick="tog(this)"><span class="cn">ping_host</span><span class="cd">Ping a host to check connectivity</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">ping_host</span> <span class="arg">google.com</span></div></div></div>
+  <div class="cc" data-s="public ip address external internet what is my"><div class="ch" onclick="tog(this)"><span class="cn">public_ip</span><span class="cd">Get the PC's public internet IP</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">public_ip</span></div></div></div>
+  <div class="cc" data-s="wifi list networks available nearby ssid wireless scan"><div class="ch" onclick="tog(this)"><span class="cn">wifi_list</span><span class="cd">List available WiFi networks nearby</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">wifi_list</span></div></div></div>
+  <div class="cc" data-s="wifi password saved wpa key credentials recover show">
+    <div class="ch" onclick="tog(this)"><span class="cn">wifi_password</span><span class="cd">Get saved WiFi passwords on the PC</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">wifi_password</span></div><div class="cl">Response</div><div class="code out">HomeNetwork: MyPassword123&#10;OfficeWifi: WorkPass456</div></div>
+  </div>
+  <div class="cc" data-s="traceroute trace route hops path network"><div class="ch" onclick="tog(this)"><span class="cn">traceroute</span><span class="cd">Trace the network path to a host</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">traceroute</span> <span class="arg">google.com</span></div></div></div>
+</div>
+
+<!-- ADVANCED -->
+<div class="section" id="advanced">
+  <div class="sh"><span class="si2">🔧</span><span class="st">Advanced</span><span class="sn">8</span></div>
+
+  <div class="cc" data-s="wallpaper desktop background image set change photo">
+    <div class="ch" onclick="tog(this)"><span class="cn">set_wallpaper</span><span class="nb">NEW</span><span class="cd">Change the desktop wallpaper</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">set_wallpaper</span> <span class="arg">C:/path/to/image.jpg</span></div></div>
+  </div>
+
+  <div class="cc" data-s="disable input block keyboard mouse freeze lock seconds">
+    <div class="ch" onclick="tog(this)"><span class="cn">disable_input</span><span class="nb">NEW</span><span class="cd">Block keyboard and mouse for N seconds</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">disable_input</span> <span class="arg">10</span>  <span class="cmt">← freeze for 10 seconds (max 30)</span></div><div class="tip warn"><b>⚠️</b> App still receives commands during freeze.</div></div>
+  </div>
+
+  <div class="cc" data-s="task manager open taskmgr windows processes">
+    <div class="ch" onclick="tog(this)"><span class="cn">task_manager</span><span class="nb">NEW</span><span class="cd">Open Task Manager on the PC</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">task_manager</span></div></div>
+  </div>
+
+  <div class="cc" data-s="windows key product license serial number activation recover">
+    <div class="ch" onclick="tog(this)"><span class="cn">get_windows_key</span><span class="nb">NEW</span><span class="cd">Retrieve the Windows product key</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">get_windows_key</span></div><div class="cl">Response</div><div class="code out">Windows Key: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX</div><div class="tip">Useful if you need to reinstall Windows and don't have the key written down.</div></div>
+  </div>
+
+  <div class="cc" data-s="empty recycle bin trash clear delete junk space">
+    <div class="ch" onclick="tog(this)"><span class="cn">empty_recycle</span><span class="nb">NEW</span><span class="cd">Empty the Recycle Bin</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">empty_recycle</span></div></div>
+  </div>
+
+  <div class="cc" data-s="registry read windows regedit key value hklm hkcu">
+    <div class="ch" onclick="tog(this)"><span class="cn">registry_read</span><span class="cd">Read a Windows registry key</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">registry_read</span> <span class="arg">HKLM:\PATH [ValueName]</span></div><div class="code eg">/send script1 <span class="kw">registry_read</span> <span class="arg">HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion ProductName</span></div></div>
+  </div>
+
+  <div class="cc" data-s="whoami user account who am i username current windows"><div class="ch" onclick="tog(this)"><span class="cn">whoami</span><span class="cd">Show current Windows user info</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">whoami</span></div></div></div>
+  <div class="cc" data-s="env environment variables system path username list"><div class="ch" onclick="tog(this)"><span class="cn">env</span><span class="cd">Read environment variables</span><span class="ca">▶</span></div><div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">env</span>           <span class="cmt">← list all</span>&#10;<span class="kw">env</span> <span class="arg">PATH</span>      <span class="cmt">← specific variable</span>&#10;<span class="kw">env</span> <span class="arg">USERNAME</span></div></div></div>
+</div>
+
+<!-- STARTUP -->
+<div class="section" id="startup">
+  <div class="sh"><span class="si2">🚀</span><span class="st">Startup Management</span><span class="sn">2</span></div>
+
+  <div class="cc" data-s="add startup auto start windows login boot shortcut automatic">
+    <div class="ch" onclick="tog(this)"><span class="cn">add_startup</span><span class="cd">Add app to Windows startup (shortcut method)</span><span class="ca">▶</span></div>
+    <div class="cb">
+      <div class="cl">Usage</div><div class="code"><span class="kw">add_startup</span></div>
+      <div class="tip">Creates a <b>.lnk shortcut</b> in the Windows Startup folder pointing to the .exe. The exe stays in <b>dist\</b>. This is the correct Windows method — no PermissionError.</div>
+    </div>
+  </div>
+
+  <div class="cc" data-s="remove startup disable auto start windows login">
+    <div class="ch" onclick="tog(this)"><span class="cn">remove_startup</span><span class="cd">Remove app from Windows startup</span><span class="ca">▶</span></div>
+    <div class="cb"><div class="cl">Usage</div><div class="code"><span class="kw">remove_startup</span></div></div>
+  </div>
+</div>
+
+<!-- CHEAT SHEET -->
+<div class="section" id="cheat">
+  <div class="sh"><span class="si2">⚡</span><span class="st">Quick Cheat Sheet</span></div>
+  <table class="rtbl">
+    <tr><th>Goal</th><th>Command</th></tr>
+    <tr><td>See the screen</td><td><code>screenshot</code></td></tr>
+    <tr><td>Type Russian text</td><td><code>type_text Привет мир</code></td></tr>
+    <tr><td>Switch to new Railway server</td><td><code>update_server wss://new.railway.app/ws</code></td></tr>
+    <tr><td>Check current config</td><td><code>show_config</code></td></tr>
+    <tr><td>Make PC speak aloud</td><td><code>speak Do your homework now</code></td></tr>
+    <tr><td>Check laptop battery</td><td><code>battery</code></td></tr>
+    <tr><td>Open website on remote PC</td><td><code>open_url https://google.com</code></td></tr>
+    <tr><td>Change desktop wallpaper</td><td><code>set_wallpaper C:/image.jpg</code></td></tr>
+    <tr><td>Get saved WiFi passwords</td><td><code>wifi_password</code></td></tr>
+    <tr><td>Get Windows license key</td><td><code>get_windows_key</code></td></tr>
+    <tr><td>Freeze input for 10 seconds</td><td><code>disable_input 10</code></td></tr>
+    <tr><td>Send to ALL PCs at once</td><td><code>/broadcast status</code></td></tr>
+    <tr><td>Shutdown at 10pm</td><td><code>schedule_task 22:00 shutdown</code></td></tr>
+    <tr><td>Kill a frozen app</td><td><code>kill_process chrome.exe</code></td></tr>
+    <tr><td>Get a file from PC</td><td><code>download_file C:\doc.pdf</code></td></tr>
+    <tr><td>Read clipboard</td><td><code>clipboard_get</code></td></tr>
+    <tr><td>Alert user with voice</td><td><code>speak Wake up!</code></td></tr>
+    <tr><td>Empty recycle bin</td><td><code>empty_recycle</code></td></tr>
+    <tr><td>Add to Windows startup</td><td><code>add_startup</code></td></tr>
+    <tr><td>Close all open windows</td><td><code>close_all_apps</code></td></tr>
+  </table>
+</div>
+
+</main>
+</div>
+
+<script>
+function tog(hdr){ hdr.parentElement.classList.toggle('open'); }
+
+function doSearch(q){
+  q = q.toLowerCase().trim();
+  let total = 0;
+  document.querySelectorAll('.section').forEach(sec => {
+    if(['how','cheat'].includes(sec.id)){ sec.style.display = q ? 'none' : ''; return; }
+    const cards = sec.querySelectorAll('.cc');
+    let vis = 0;
+    cards.forEach(card => {
+      const name = (card.querySelector('.cn')?.textContent||'').toLowerCase();
+      const desc = (card.querySelector('.cd')?.textContent||'').toLowerCase();
+      const body = (card.querySelector('.cb')?.textContent||'').toLowerCase();
+      const s    = (card.dataset.s||'').toLowerCase();
+      const match = !q || name.includes(q)||desc.includes(q)||s.includes(q)||body.includes(q);
+      card.classList.toggle('hidden', !match);
+      if(match){ vis++; total++; if(q) card.classList.add('open'); else card.classList.remove('open'); }
+    });
+    sec.style.display = (!q || vis > 0) ? '' : 'none';
+  });
+  document.getElementById('sc').textContent = q ? `${total} command${total!==1?'s':''} found` : '';
+}
+
+const links = document.querySelectorAll('.sidebar a');
+window.addEventListener('scroll', ()=>{
+  let cur = '';
+  document.querySelectorAll('.section').forEach(s => { if(window.scrollY >= s.offsetTop - 100) cur = s.id; });
+  links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#'+cur));
+}, {passive:true});
+</script>
+</body>
+</html>
