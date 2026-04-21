@@ -330,6 +330,51 @@ async def cmd_history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append(f"`{h['time']}` [{h['from']}→{h['script']}] `{h['command']}` → {h['result'][:60]}")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /help — BOTFATHER-STYLE COMMAND LIST
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show available commands (BotFather style)."""
+    user_id = update.effective_user.id
+    is_admin = str(user_id) in ADMIN_IDS
+    
+    if is_admin:
+        help_text = """🤖 **Admin Commands** (BotFather Help)
+
+/start — Show main menu
+/scripts — List connected scripts
+/send script1 status — Send command to script
+/broadcast lock — Send to ALL scripts at once
+/intercept script1 lock — Override next command
+/history — Show last 15 commands
+/panel — Open web admin panel
+/help — Show this help
+
+💡 **Syntax:**
+• Command chaining: `/send mypc screenshot /and lock`
+• Pranks: `/send mypc prank_update` or `prank_bsod`
+• Multi-script: `/broadcast status` (all PCs report)
+
+📚 **All Commands:** Check `/panel` for full guide (82 total)
+"""
+    else:
+        help_text = """🤖 **Available Commands**
+
+Type your PC name to get a quick control menu:
+1. 📸 Screenshot
+2. 🔒 Lock Screen
+3. 🔴 Shutdown
+
+Example: `brothers_pc` → get buttons above
+
+Admin commands unavailable. Ask admin for access.
+"""
+    
+    await update.message.reply_text(help_text, parse_mode="Markdown")
+
+
 async def cmd_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id): return
     await update.message.reply_text(f"🌐 Admin panel:\n{PUBLIC_URL}/admin")
