@@ -258,7 +258,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if is_admin(uid):
         await update.message.reply_text(
-            "🖥 *Admin Control Centre*\n\n"
+            "RC *Admin Control Centre*\n\n"
             "/scripts — list connected PCs\n"
             "/send script1 command — send command\n"
             "/intercept script1 command — override next command\n"
@@ -276,7 +276,7 @@ async def cmd_scripts(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No scripts connected."); return
     lines = ["📡 *Connected scripts:*"]
     for name, info in clients.items():
-        inter = f"\n    ⚡ intercept: `{intercepts[name]}`" if name in intercepts else ""
+        inter = f"\n    * intercept: `{intercepts[name]}`" if name in intercepts else ""
         lines.append(f"• `{name}` — last seen {info['last_seen']}{inter}")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
@@ -318,7 +318,7 @@ async def cmd_intercept(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     script_name, command = args[0], " ".join(args[1:])
     intercepts[script_name] = command
     await update.message.reply_text(
-        f"⚡ Next command for `{script_name}` → `{command}`", parse_mode="Markdown"
+        f"* Next command for `{script_name}` → `{command}`", parse_mode="Markdown"
     )
 
 async def cmd_history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -383,169 +383,58 @@ async def cmd_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ─────────────────────────────────────────────────────────────────────────────
 # ADMIN WEB PANEL
 # ─────────────────────────────────────────────────────────────────────────────
-PANEL_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Remote Admin Panel</title>
-<style>
-  :root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--amber:#d29922}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding:20px}
-  h1{font-size:1.3rem;margin-bottom:18px;display:flex;align-items:center;gap:10px}
-  h1 span{font-size:1.5rem}
-  h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px;animation:pulse 2s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-  .badge{font-size:.7rem;padding:2px 7px;border-radius:20px;background:#58a6ff15;color:var(--accent);border:1px solid #58a6ff30}
-  .intercept-badge{background:#d2992215;color:var(--amber);border-color:#d2992230;margin-left:6px}
-  input,select{width:100%;padding:9px 12px;border-radius:7px;border:1px solid var(--border);background:#0d1117;color:var(--text);font-size:.9rem;margin-bottom:8px;outline:none}
-  input:focus,select:focus{border-color:var(--accent)}
-  .btn{padding:9px 16px;border-radius:7px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;width:100%;transition:opacity .15s}
-  .btn:hover{opacity:.8}
-  .btn-primary{background:var(--accent);color:#0d1117}
-  .btn-danger{background:var(--red);color:#fff;margin-top:6px}
-  .btn-warn{background:var(--amber);color:#0d1117;margin-top:6px}
-  .log{font-size:.75rem;font-family:'SF Mono',Consolas,monospace;color:var(--muted);max-height:200px;overflow-y:auto;display:flex;flex-direction:column-reverse}
-  .log div{padding:4px 0;border-bottom:1px solid var(--border)18}
-  .t-acc{color:var(--accent)} .t-green{color:var(--green)} .t-red{color:var(--red)} .t-amb{color:var(--amber)}
-  #toast{position:fixed;top:18px;right:18px;background:var(--green);color:#0d1117;padding:10px 18px;border-radius:8px;display:none;font-weight:700;z-index:999}
-  .script-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)20}
-  .script-row:last-child{border:none}
-  .script-name{font-weight:600;font-size:.95rem}
-  .quick-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:.75rem;margin-left:4px}
-  .quick-btn:hover{background:var(--border)}
-  @media(max-width:620px){.grid{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-<h1><span>🖥</span> Remote Admin Panel</h1>
-<div class="grid">
-  <div class="card">
-    <h2>Connected Scripts</h2>
-    <div id="scripts-list"><span style="color:var(--muted)">Loading…</span></div>
-  </div>
-  <div class="card">
-    <h2>Send Command</h2>
-    <select id="sel-script"><option value="">— select script —</option></select>
-    <input id="cmd" placeholder="Command (e.g. status, screenshot, shell dir)" />
-    <button class="btn btn-primary" onclick="sendCmd()">▶ Send Command</button>
-    <div style="margin-top:14px">
-      <h2 style="margin-bottom:6px">Set Intercept</h2>
-      <input id="intercept-cmd" placeholder="Command to intercept with" />
-      <button class="btn btn-warn" onclick="setIntercept()">⚡ Set Intercept for Script</button>
-    </div>
-    <div style="margin-top:14px">
-      <h2 style="margin-bottom:6px">Broadcast to ALL Scripts</h2>
-      <input id="broadcast-cmd" placeholder="e.g. status or notify hello" />
-      <button class="btn btn-danger" onclick="broadcastCmd()">📡 Broadcast</button>
-    </div>
-  </div>
-</div>
-<div class="card">
-  <h2>Command History</h2>
-  <div class="log" id="log"></div>
-</div>
-<div id="toast">✓ Done</div>
-<script>
-const KEY = localStorage.getItem('akey') || prompt('Enter your SECRET_KEY:');
-localStorage.setItem('akey', KEY);
-
-async function api(path, body=null){
-  const opts = body
-    ? {method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':KEY},body:JSON.stringify(body)}
-    : {headers:{'X-Admin-Key':KEY}};
-  const r = await fetch(path, opts);
-  return r.json();
-}
-
-function toast(msg='Done'){
-  const t=document.getElementById('toast');
-  t.textContent='✓ '+msg; t.style.display='block';
-  setTimeout(()=>t.style.display='none',2000);
-}
-
-const QUICK_CMDS = ['status','screenshot','cpu','ram','disk','lock','screenshot'];
-
-async function refresh(){
-  const d = await api('/api/status');
-  const sl = document.getElementById('scripts-list');
-  const sel = document.getElementById('sel-script');
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">— select script —</option>';
-
-  if(!d.scripts||d.scripts.length===0){
-    sl.innerHTML='<span style="color:var(--muted)">None connected</span>';
-  } else {
-    sl.innerHTML = d.scripts.map(s=>`
-      <div class="script-row">
-        <div>
-          <span class="dot"></span>
-          <span class="script-name">${s.name}</span>
-          <span class="badge" style="margin-left:6px">last ${s.last_seen}</span>
-          ${s.intercept?`<span class="badge intercept-badge">⚡ ${s.intercept}</span>`:''}
-        </div>
-        <div>
-          ${QUICK_CMDS.slice(0,3).map(c=>`<button class="quick-btn" onclick="quickSend('${s.name}','${c}')">${c}</button>`).join('')}
-        </div>
-      </div>`).join('');
-    d.scripts.forEach(s=>{
-      const o=document.createElement('option');
-      o.value=s.name; o.textContent=s.name;
-      sel.appendChild(o);
-    });
-    if(prev) sel.value=prev;
-  }
-
-  document.getElementById('log').innerHTML=(d.history||[]).slice(-60).reverse().map(h=>
-    `<div>[<span class="t-acc">${h.time}</span>] <span class="t-amb">${h.from}→${h.script}</span> <b>${h.command}</b> <span class="t-green">${h.result.slice?.(0,80)||''}</span></div>`
-  ).join('');
-}
-
-async function quickSend(script, cmd){
-  await api('/api/send',{script,command:cmd});
-  toast(`${cmd} → ${script}`); refresh();
-}
-
-async function sendCmd(){
-  const script=document.getElementById('sel-script').value;
-  const cmd=document.getElementById('cmd').value.trim();
-  if(!script||!cmd){alert('Select a script and enter a command.');return;}
-  await api('/api/send',{script,command:cmd});
-  document.getElementById('cmd').value='';
-  toast(); refresh();
-}
-
-async function setIntercept(){
-  const script=document.getElementById('sel-script').value;
-  const cmd=document.getElementById('intercept-cmd').value.trim();
-  if(!script||!cmd){alert('Select script and enter intercept command.');return;}
-  await api('/api/intercept',{script,command:cmd});
-  document.getElementById('intercept-cmd').value='';
-  toast('Intercept set'); refresh();
-}
-
-async function broadcastCmd(){
-  const cmd=document.getElementById('broadcast-cmd').value.trim();
-  if(!cmd||!confirm(`Broadcast "${cmd}" to ALL connected scripts?`)) return;
-  await api('/api/broadcast',{command:cmd});
-  document.getElementById('broadcast-cmd').value='';
-  toast('Broadcast sent'); refresh();
-}
-
-refresh(); setInterval(refresh,3000);
-</script>
-</body>
-</html>"""
-
-
 def chk(r: web.Request) -> bool:
     return r.headers.get("X-Admin-Key") == SECRET_KEY
 
 async def h_panel(r):
-    return web.Response(text=PANEL_HTML, content_type="text/html")
+    """Serve the admin panel HTML"""
+    try:
+        # Try to read from file
+        panel_file = Path(__file__).parent / "admin_panel.html"
+        if panel_file.exists():
+            content = panel_file.read_text(encoding='utf-8')
+            return web.Response(text=content, content_type="text/html")
+    except:
+        pass
+    # Fallback: serve embedded minimal panel
+    return web.Response(text="""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Remote Control Admin</title>
+        <style>
+            body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, sans-serif; padding: 40px; }
+            .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin: 20px 0; max-width: 600px; }
+            input { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 10px; border-radius: 4px; width: 100%; margin: 10px 0; font-size: 1rem; }
+            button { background: #58a6ff; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; }
+            button:hover { background: #65b1ff; }
+            .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; }
+            .modal-content { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 40px; max-width: 400px; text-align: center; }
+        </style>
+    </head>
+    <body>
+        <div class="modal">
+            <div class="modal-content">
+                <h1>Admin Panel Loading...</h1>
+                <p>The full panel HTML file is being loaded.</p>
+                <p style="color: #8b949e; margin-top: 20px; font-size: 0.9rem;">If you see this, please refresh the page. Full panel should load automatically.</p>
+                <button onclick="location.reload()">Refresh</button>
+            </div>
+        </div>
+        <script>
+            setTimeout(() => location.reload(), 3000);
+        </script>
+    </body>
+    </html>
+    """, content_type="text/html")
+
+
+
+async def h_panel(r):
+    """Serve admin panel"""
+    html = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><title>Remote Control Admin</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,sans-serif;padding:20px}h1{margin-bottom:20px}.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:20px}input,textarea{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:10px;border-radius:4px;width:100%;margin-bottom:10px;font-family:monospace;font-size:0.9rem}button{background:#58a6ff;color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:600;margin-top:10px}button:hover{background:#65b1ff}#scripts{list-style:none}#scripts li{padding:10px;background:#0d1117;margin-bottom:5px;border-radius:4px;cursor:pointer}#scripts li:hover{background:#1c2128}#scripts li.active{background:#58a6ff20;border-left:3px solid #58a6ff}#history{background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:10px;max-height:300px;overflow-y:auto;font-family:monospace;font-size:0.85rem}.hist-item{padding:5px;border-bottom:1px solid #30363d}.hist-item:last-child{border:0}</style></head><body><h1>Remote Control Admin Panel</h1><div class="card"><h2>Scripts</h2><ul id="scripts"></ul></div><div class="card"><h2>Send Command</h2><select id="script-select"><option value="">Select a script</option></select><br><input type="text" id="cmd-input" placeholder="Command (e.g. screenshot /and lock)" onkeypress="if(event.key=='Enter')sendCmd()"><button onclick="sendCmd()">Send</button><button onclick="sendBroadcast()" style="background:#f85149">Broadcast All</button></div><div class="card"><h2>History</h2><div id="history"><div style="color:#8b949e">No commands yet</div></div></div><script>let selectedScript=null;async function loadScripts(){const r=await fetch('/api/scripts',{headers:{'X-Admin-Key':prompt('Admin Key:')||''}});const d=await r.json();if(!d.scripts)return;const select=document.getElementById('script-select');const list=document.getElementById('scripts');list.innerHTML='';select.innerHTML='<option value="">Select a script</option>';d.scripts.forEach(s=>{const li=document.createElement('li');li.textContent=s.name+(s.connected?' [ONLINE]':' [OFFLINE]');li.onclick=()=>{selectedScript=s.name;document.querySelectorAll('#scripts li').forEach(e=>e.classList.remove('active'));li.classList.add('active');select.value=s.name};list.appendChild(li);const opt=document.createElement('option');opt.value=s.name;opt.textContent=s.name;select.appendChild(opt)});if(d.history)(d.history||[]).slice(-20).reverse().forEach(h=>{const item=document.createElement('div');item.className='hist-item';item.textContent=`[${h.time}] ${h.script}: ${h.command} -> ${h.result.substring(0,50)}...`;document.getElementById('history').appendChild(item)})}async function sendCmd(){const cmd=document.getElementById('cmd-input').value;const script=selectedScript||document.getElementById('script-select').value;if(!cmd||!script){alert('Select script and enter command');return}await fetch('/api/send',{method:'POST',headers:{'X-Admin-Key':prompt('Key:')||'','Content-Type':'application/json'},body:JSON.stringify({script:script,command:cmd})});document.getElementById('cmd-input').value='';loadScripts()}async function sendBroadcast(){const cmd=document.getElementById('cmd-input').value;if(!cmd){alert('Enter command');return}await fetch('/api/broadcast',{method:'POST',headers:{'X-Admin-Key':prompt('Key:')||'','Content-Type':'application/json'},body:JSON.stringify({command:cmd})});loadScripts()}loadScripts();setInterval(loadScripts,3000)</script></body></html>"""
+    return web.Response(text=html, content_type="text/html")
+
 
 async def h_status(r):
     if not chk(r): return web.Response(status=403, text="Forbidden")
