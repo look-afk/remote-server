@@ -1,129 +1,82 @@
-# PCRC Bootstrap — запускай на чистом компе, ничего заранее не нужно
-# Использование (в PowerShell или CMD):
+# PCRC Bootstrap — качает готовый .exe с GitHub Releases
+# Использование:
 #   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ТВО_ЮЗ/pcrc/main/bootstrap.ps1 | iex"
 
 $ErrorActionPreference = "Stop"
-$Repo    = "ТВО_ЮЗ/pcrc"           # <-- замени на свой GitHub user/repo
-$Branch  = "main"
-$InstDir = "$env:USERPROFILE\PCRC"
 
-function Write-Step($n, $msg) {
-    Write-Host ""
-    Write-Host "  [$n] $msg" -ForegroundColor Cyan
-}
-function Write-Ok($msg)   { Write-Host "      OK  $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "      >>  $msg" -ForegroundColor Yellow }
+# ══════════════════════════════════════════════════════
+#  ЗАПОЛНИ ОДИН РАЗ
+# ══════════════════════════════════════════════════════
+$Repo    = "look-afk/remote-server"
+$ZipName    = "dist.zip"                              # <-- имя zip-файла на Releases
+$SecretKey  = "Zafarjon1224"
+$ServerUrl  = "wss://remote-server-mr8v.onrender.com"
+$UpdateUrl  = "https://raw.githubusercontent.com/look-afk/pcrc-versions/main"
+# ══════════════════════════════════════════════════════
+
+$InstDir    = "$env:USERPROFILE\PCRC"
+$ReleaseUrl = "https://github.com/$Repo/releases/latest/download/$ZipName"
 
 Write-Host ""
-Write-Host "  ================================" -ForegroundColor Blue
-Write-Host "   PCRC Bootstrap Installer" -ForegroundColor White
-Write-Host "  ================================" -ForegroundColor Blue
+Write-Host "  ==============================" -ForegroundColor Blue
+Write-Host "   PCRC Installer" -ForegroundColor White
+Write-Host "  ==============================" -ForegroundColor Blue
 Write-Host ""
 
-# ── 1. Python ────────────────────────────────────────────────────────────────
-Write-Step "1/5" "Проверяем Python..."
-
-$py = $null
-try { $py = (python --version 2>&1).ToString() } catch {}
-
-if ($py -match "Python 3") {
-    Write-Ok $py
-} else {
-    Write-Warn "Python не найден — устанавливаем через winget..."
-    try {
-        winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
-        # Обновляем PATH в текущей сессии
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + `
-                    [System.Environment]::GetEnvironmentVariable("PATH","User")
-        Write-Ok "Python установлен"
-    } catch {
-        # winget недоступен (старый Windows) — качаем installer напрямую
-        Write-Warn "winget недоступен, скачиваем installer с python.org..."
-        $PyInstaller = "$env:TEMP\python_installer.exe"
-        Invoke-WebRequest "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe" `
-            -OutFile $PyInstaller -UseBasicParsing
-        Start-Process $PyInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1" -Wait
-        Remove-Item $PyInstaller -Force
-        # Обновляем PATH
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + `
-                    [System.Environment]::GetEnvironmentVariable("PATH","User")
-        Write-Ok "Python установлен"
-    }
+# Имя ПК
+$PCName = ""
+while ($PCName.Trim() -eq "") {
+    $PCName = Read-Host "  Как назвать этот ПК (например HomePC)"
 }
 
-# ── 2. Скачиваем PCRC ────────────────────────────────────────────────────────
-Write-Step "2/5" "Скачиваем PCRC с GitHub..."
+# ── 1. Скачиваем ─────────────────────────────────────────────────────────────
+Write-Host ""
+Write-Host "  [1/3] Скачиваем $ZipName..." -ForegroundColor Cyan
+$TmpZip     = "$env:TEMP\pcrc_release.zip"
+$TmpExtract = "$env:TEMP\pcrc_extract"
+Invoke-WebRequest -Uri $ReleaseUrl -OutFile $TmpZip -UseBasicParsing
+Write-Host "        OK" -ForegroundColor Green
 
-$ZipUrl = "https://github.com/$Repo/archive/refs/heads/$Branch.zip"
-$TmpZip = "$env:TEMP\pcrc_bootstrap.zip"
-$TmpDir = "$env:TEMP\pcrc_bootstrap_extract"
+# ── 2. Распаковываем — ищем RemoteControl.exe где бы он ни лежал ─────────────
+Write-Host "  [2/3] Распаковываем..." -ForegroundColor Cyan
 
-Invoke-WebRequest -Uri $ZipUrl -OutFile $TmpZip -UseBasicParsing
-Write-Ok "Архив скачан"
+if (Test-Path $TmpExtract) { Remove-Item $TmpExtract -Recurse -Force }
+Expand-Archive -Path $TmpZip -DestinationPath $TmpExtract -Force
 
-# ── 3. Распаковываем ─────────────────────────────────────────────────────────
-Write-Step "3/5" "Распаковываем..."
+# Ищем папку где лежит RemoteControl.exe (может быть dist\ или корень)
+$ExeFile = Get-ChildItem -Path $TmpExtract -Recurse -Filter "RemoteControl.exe" | Select-Object -First 1
+if (-not $ExeFile) {
+    Write-Host "  ОШИБКА: RemoteControl.exe не найден в архиве!" -ForegroundColor Red
+    exit 1
+}
+$SourceDir = $ExeFile.DirectoryName
 
-if (Test-Path $TmpDir) { Remove-Item $TmpDir -Recurse -Force }
-Expand-Archive -Path $TmpZip -DestinationPath $TmpDir -Force
-
-$Extracted = Get-ChildItem $TmpDir | Select-Object -First 1
 if (Test-Path $InstDir) { Remove-Item $InstDir -Recurse -Force }
-Copy-Item $Extracted.FullName $InstDir -Recurse -Force
+New-Item -ItemType Directory -Path $InstDir | Out-Null
+Copy-Item "$SourceDir\*" $InstDir -Recurse -Force
 
-Remove-Item $TmpZip -Force -ErrorAction SilentlyContinue
-Remove-Item $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
-Write-Ok "Установлено в $InstDir"
+Remove-Item $TmpZip     -Force -ErrorAction SilentlyContinue
+Remove-Item $TmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "        OK  → $InstDir" -ForegroundColor Green
 
-# ── 4. Зависимости ───────────────────────────────────────────────────────────
-Write-Step "4/5" "Устанавливаем зависимости pip..."
-
-$Req = "$InstDir\requirements-client.txt"
-if (Test-Path $Req) {
-    python -m pip install --upgrade pip -q
-    python -m pip install -r $Req -q
-} else {
-    python -m pip install -q websockets requests pillow pystray pywin32 `
-        SpeechRecognition pyaudio psutil fastmcp
-}
-Write-Ok "Зависимости установлены"
-
-# ── 5. Config ────────────────────────────────────────────────────────────────
-Write-Step "5/5" "Создаём config.json..."
-
-$Config   = "$InstDir\config.json"
-$ConfigEx = "$InstDir\config.example.json"
-
-if (-not (Test-Path $Config)) {
-    if (Test-Path $ConfigEx) {
-        Copy-Item $ConfigEx $Config
-    } else {
-        @{
-            name       = "MyPC"
-            secret_key = "измени_пароль"
-            server_url = "wss://your-server.onrender.com"
-            update_url = ""
-        } | ConvertTo-Json | Set-Content $Config -Encoding UTF8
-    }
-}
-
-# Открываем config.json в блокноте
-Write-Warn "Открываю config.json — заполни secret_key и server_url"
-Start-Process notepad.exe $Config
+# ── 3. Config ────────────────────────────────────────────────────────────────
+Write-Host "  [3/3] Создаём config.json..." -ForegroundColor Cyan
+@{
+    name       = $PCName.Trim()
+    secret_key = $SecretKey
+    server_url = $ServerUrl
+    update_url = $UpdateUrl
+} | ConvertTo-Json | Set-Content "$InstDir\config.json" -Encoding UTF8
+Write-Host "        OK" -ForegroundColor Green
 
 # ── Готово ───────────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "  ================================" -ForegroundColor Green
-Write-Host "   Установка завершена!" -ForegroundColor White
-Write-Host "  ================================" -ForegroundColor Green
+Write-Host "  ==============================" -ForegroundColor Green
+Write-Host "   Готово! Запускай RemoteControl.exe" -ForegroundColor White
+Write-Host "  ==============================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Папка:  $InstDir" -ForegroundColor White
-Write-Host ""
-Write-Host "  Запуск:" -ForegroundColor Cyan
-Write-Host "    1. Заполни config.json (уже открыт в блокноте)" -ForegroundColor White
-Write-Host "    2. Запусти dev.bat для теста" -ForegroundColor White
-Write-Host "    3. Или .\build-client.ps1 для сборки exe" -ForegroundColor White
+Write-Host "   ПК:    $PCName" -ForegroundColor White
+Write-Host "   Папка: $InstDir" -ForegroundColor White
 Write-Host ""
 
-# Открываем папку в проводнике
 Start-Process explorer.exe $InstDir
