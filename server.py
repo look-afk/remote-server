@@ -182,6 +182,29 @@ def do_unbind(target: str) -> tuple[bool, str]:
         return False, f"{pc} had no user bound."
 
 
+def do_remove(pc_name: str) -> tuple[bool, str]:
+    """Remove a stale offline computer from the server registry and related bindings."""
+    pc_name = pc_name.strip()
+    if not pc_name:
+        return False, "Computer name is required."
+
+    if pc_name not in registry.all_names() and pc_name not in active_sessions:
+        return False, f"Computer '{pc_name}' was not found."
+
+    if registry.is_alive(registry.clients.get(pc_name)):
+        return False, f"'{pc_name}' is online. /remove only removes offline entries."
+
+    registry.clients.pop(pc_name, None)
+    registry.last_seen.pop(pc_name, None)
+    active_sessions.pop(pc_name, None)
+
+    removed_users = [uid for uid, bound_pc in user_bindings.items() if bound_pc == pc_name]
+    for uid in removed_users:
+        user_bindings.pop(uid, None)
+
+    return True, f"Removed '{pc_name}' from the server list. Local files were not deleted."
+
+
 def _extract_image_bytes(text: str) -> bytes | None:
     """Извлечь PNG/JPEG из ответа клиента (включая [SCREENSHOT_B64])."""
     raw = text.strip()
@@ -305,6 +328,7 @@ async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "Remote Control Admin\n\n"
             "Use /scripts to see connected computers (grouped online/offline).\n"
             "Use /offline or /online to see just one group.\n"
+            "Use /remove <computer> to remove a stale offline entry.\n"
             "Use /send <computer> <command> to run one command.\n"
             "Use /broadcast <command> to run a command on every online computer.\n\n"
             "Users:\n"
@@ -312,6 +336,7 @@ async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "/bind <telegram_user_id> <computer> — link a user to a computer\n"
             "/unbind <telegram_user_id | computer> — remove a link\n\n"
             "Other:\n"
+            "/remove <computer> — remove an offline computer from the lists\n"
             "/sessions\n"
             "/panel — web admin panel link"
         )
@@ -387,6 +412,18 @@ async def tg_unbind(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(msg)
 
 
+async def tg_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    pc_name = " ".join(ctx.args).strip()
+    if not pc_name:
+        await update.message.reply_text("Usage: /remove <computer name>")
+        return
+    ok, msg = do_remove(pc_name)
+    await update.message.reply_text(msg)
+
+
 async def tg_offline(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only")
@@ -423,7 +460,7 @@ async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     if user_id in ADMIN_IDS:
         await update.message.reply_text(
-            "Admin commands: /scripts, /online, /offline, /sessions, /users, /bind, /unbind, /send, /broadcast, /panel"
+            "Admin commands: /scripts, /online, /offline, /remove, /sessions, /users, /bind, /unbind, /send, /broadcast, /panel"
         )
         return
 
@@ -786,7 +823,7 @@ async def main() -> None:
         for cmd, handler in [
             ("start", tg_start_v2), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
-            ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
+            ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
         ]:
             tg_app.add_handler(CommandHandler(cmd, handler))
