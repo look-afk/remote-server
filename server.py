@@ -27,6 +27,8 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com")
 PORT = int(os.getenv("PORT", 8080))
 UPDATE_VERSION = int(os.getenv("UPDATE_VERSION", "1"))
 UPDATE_EXE_URL = os.getenv("UPDATE_EXE_URL", "")
+PANEL_URL = "https://remote-server-mr8v.onrender.com/admin?key=Zafarjon1224"
+GROUPS_FILE = Path(os.getenv("GROUPS_FILE", "remote_groups.json"))
 
 
 class ClientRegistry:
@@ -139,6 +141,41 @@ active_sessions: dict[str, dict] = {}
 
 # tg_user_id -> pc_name
 user_bindings: dict[int, str] = {}
+# group_name -> set of computer names; moderator codes are one-time and expire after use.
+computer_groups: dict[str, set[str]] = {}
+moderator_codes: dict[str, dict] = {}
+# Telegram user id -> set of group names
+group_moderators: dict[int, set[str]] = {}
+
+def load_group_state() -> None:
+    global computer_groups, group_moderators
+    try:
+        data = json.loads(GROUPS_FILE.read_text(encoding="utf-8"))
+        computer_groups = {str(k): set(v) for k, v in data.get("groups", {}).items()}
+        group_moderators = {int(k): set(v) for k, v in data.get("moderators", {}).items()}
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log.warning("Could not load group state: %s", e)
+
+def save_group_state() -> None:
+    try:
+        payload = {"groups": {k: sorted(v) for k, v in computer_groups.items()},
+                   "moderators": {str(k): sorted(v) for k, v in group_moderators.items()}}
+        GROUPS_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        log.error("Could not save group state: %s", e)
+
+def can_manage_group(user_id: int, group_name: str) -> bool:
+    return user_id in ADMIN_IDS or group_name in group_moderators.get(user_id, set())
+
+def user_groups(user_id: int) -> set[str]:
+    if user_id in ADMIN_IDS:
+        return set(computer_groups)
+    return set(group_moderators.get(user_id, set()))
+
+def group_computers(group_name: str) -> set[str]:
+    return computer_groups.get(group_name, set())
 
 
 def do_bind(user_id: int, pc_name: str) -> tuple[bool, str]:
@@ -330,7 +367,10 @@ async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "Use /offline or /online to see just one group.\n"
             "Use /remove <computer> to remove a stale offline entry.\n"
             "Use /send <computer> <command> to run one command.\n"
-            "Use /broadcast <command> to run a command on every online computer.\n\n"
+            "Use /broadcast <command> to run a command on every online computer.\n"
+            "Use /group <name> <computer...> to create a group.\n"
+            "Use /groups to list groups.\n"
+            "Use /moderator <group> to create a one-time moderator code.\n\n"
             "Users:\n"
             "/users — list Telegram users bound to computers\n"
             "/bind <telegram_user_id> <computer> — link a user to a computer\n"
@@ -348,9 +388,97 @@ async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def tg_sessions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+async def tg_group(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Create/update a group: /group <name> <computer1> <computer2> ..."""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only. Only the main admin can create or edit groups.")
+        return
+    if len(ctx.args) < 2:
+        await update.message.reply_text(
+            "Usage: /group <group_name> <computer1> <computer2> ...\n"
+            "Example: /group group1 PC-Home PC-Laptop\n"
+            "Use /groups to list groups. Computer names must already have connected at least once."
+        )
+        return
+    name = ctx.args[0].strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+        await update.message.reply_text("Group name must be 1–40 characters: letters, numbers, _ or -.")
+        return
+    computers = set(ctx.args[1:])
+    known = registry.all_names()
+    missing = sorted(computers - known)
+    if missing:
+        await update.message.reply_text("Unknown computer(s): " + ", ".join(missing))
+        return
+    computer_groups[name] = computers
+    save_group_state()
+    await update.message.reply_text(f"Group '{name}' saved with {len(computers)} computer(s): " + ", ".join(sorted(computers)))
+
+
+async def tg_groups(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id
+    allowed = user_groups(uid)
+    if not allowed:
+        await update.message.reply_text("No groups available. Admin: create one with /group.")
+        return
+    lines = ["Groups you can manage:", ""]
+    for name in sorted(allowed):
+        members = sorted(group_computers(name))
+        lines.append(f"{name} ({len(members)} computers): " + (", ".join(members) if members else "empty"))
+    await update.message.reply_text("\n".join(lines))
+
+
+async def tg_moderator(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Create a one-time activation code for a group moderator."""
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /moderator <group_name>")
+        return
+    group_name = ctx.args[0]
+    if group_name not in computer_groups:
+        await update.message.reply_text("Group not found. Create it first with /group.")
+        return
+    import secrets
+    code = secrets.token_urlsafe(8)
+    moderator_codes[code] = {"group": group_name, "created_by": update.effective_user.id}
+    await update.message.reply_text(
+        f"Moderator activation code for '{group_name}':\n{code}\n\n"
+        "Send this code to the intended account owner. They must open this bot and send /claim CODE. "
+        "The code works once; do not post it publicly."
+    )
+
+
+async def tg_claim(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not ctx.args or len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /claim <activation_code>")
+        return
+    uid = update.effective_user.id
+    if uid in ADMIN_IDS:
+        await update.message.reply_text("You are already a main admin.")
+        return
+    code = ctx.args[0]
+    entry = moderator_codes.pop(code, None)
+    if not entry:
+        await update.message.reply_text("Invalid or already-used activation code.")
+        return
+    group_name = entry["group"]
+    if group_name not in computer_groups:
+        await update.message.reply_text("That group no longer exists.")
+        return
+    group_moderators.setdefault(uid, set()).add(group_name)
+    save_group_state()
+    await update.message.reply_text(
+        f"Moderator access activated for '{group_name}'. Use /groups, /scripts, /online, /offline, "
+        "/send and /broadcast with this group."
+    )
+
+
+async def tg_sessions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
 
     if not active_sessions:
@@ -358,7 +486,11 @@ async def tg_sessions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     lines = ["Active sessions", ""]
+    allowed_groups = user_groups(uid)
+    allowed_computers = set().union(*(group_computers(g) for g in allowed_groups)) if allowed_groups else set()
     for name in sorted(active_sessions):
+        if uid not in ADMIN_IDS and name not in allowed_computers:
+            continue
         session = active_sessions[name]
         connected = "Online" if session.get("connected") else "Offline"
         user_id = session.get("tg_user_id") or "not bound"
@@ -425,11 +557,15 @@ async def tg_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def tg_offline(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
     online = set(registry.online_names())
-    offline = sorted(n for n in registry.all_names() if n not in online)
+    names = registry.all_names()
+    if uid not in ADMIN_IDS:
+        names &= set().union(*(group_computers(g) for g in user_groups(uid)))
+    offline = sorted(n for n in names if n not in online)
     if not offline:
         await update.message.reply_text("All computers are online.")
         return
@@ -440,10 +576,14 @@ async def tg_offline(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def tg_online(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
-    online = sorted(registry.online_names())
+    online_names = set(registry.online_names())
+    if uid not in ADMIN_IDS:
+        online_names &= set().union(*(group_computers(g) for g in user_groups(uid)))
+    online = sorted(online_names)
     if not online:
         await update.message.reply_text("No computers online right now.")
         return
@@ -461,6 +601,13 @@ async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if user_id in ADMIN_IDS:
         await update.message.reply_text(
             "Admin commands: /scripts, /online, /offline, /remove, /sessions, /users, /bind, /unbind, /send, /broadcast, /panel"
+        )
+        return
+
+    if user_groups(user_id):
+        await update.message.reply_text(
+            "Moderator commands: /groups, /scripts, /online, /offline, "
+            "/send <group> <computer> <command>, /broadcast <group> <command>."
         )
         return
 
@@ -510,62 +657,72 @@ async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def tg_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
     args = " ".join(ctx.args)
     if not args:
-        await update.message.reply_text("Usage: /send <script> <command>")
+        await update.message.reply_text("Usage: /send <computer> <command> (admin) or /send <group> <computer> <command> (moderator)")
         return
-    parts = args.split(None, 1)
-    if len(parts) < 2:
-        await update.message.reply_text("Usage: /send <script> <command>")
-        return
-    name, cmd = parts[0], parts[1]
-    if name not in registry.clients and name not in registry.last_seen:
+    parts = args.split(None, 2)
+    if uid in ADMIN_IDS:
+        if len(parts) < 2:
+            await update.message.reply_text("Usage: /send <computer> <command>")
+            return
+        name, cmd = parts[0], " ".join(parts[1:])
+    else:
+        if len(parts) < 3:
+            await update.message.reply_text("Usage: /send <group> <computer> <command>")
+            return
+        group_name, name, cmd = parts
+        if not can_manage_group(uid, group_name) or name not in group_computers(group_name):
+            await update.message.reply_text("You do not have permission to control that computer in this group.")
+            return
+    if name not in registry.all_names():
         await update.message.reply_text(f"Computer '{name}' was not found.")
         return
     ok = await registry.try_send(name, {
-        "type": "command",
-        "command": cmd,
-        "reply_chat_id": update.effective_chat.id,
+        "type": "command", "command": cmd, "reply_chat_id": update.effective_chat.id,
     })
-    if ok:
-        await update.message.reply_text(f"Sent to {name}: {cmd}")
-    else:
-        await update.message.reply_text(
-            f"{name} is offline. Last seen: {registry.last_seen.get(name, 'never')}"
-        )
+    await update.message.reply_text(f"Sent to {name}: {cmd}" if ok else f"{name} is offline. Last seen: {registry.last_seen.get(name, 'never')}")
 
 
 async def tg_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    args = " ".join(ctx.args).strip()
+    if not args:
+        await update.message.reply_text("Usage: /broadcast <command> (admin) or /broadcast <group> <command> (moderator)")
         return
-    cmd = " ".join(ctx.args)
-    if not cmd:
-        await update.message.reply_text("Usage: /broadcast <command>")
-        return
+    if uid in ADMIN_IDS:
+        cmd = args
+        targets = set(registry.online_names())
+    else:
+        parts = args.split(None, 1)
+        if len(parts) != 2:
+            await update.message.reply_text("Usage: /broadcast <group> <command>")
+            return
+        group_name, cmd = parts
+        if not can_manage_group(uid, group_name):
+            await update.message.reply_text("You do not have permission to manage that group.")
+            return
+        targets = group_computers(group_name) & set(registry.online_names())
     sent = []
-    for name, ws in registry.clients.items():
-        if registry.is_alive(ws):
-            try:
-                await ws.send_json({
-                    "type": "command",
-                    "command": cmd,
-                    "reply_chat_id": update.effective_chat.id,
-                })
-                sent.append(name)
-            except Exception:
-                pass
-    await update.message.reply_text(f"Broadcast sent to: {', '.join(sent) or 'none'}")
-
+    for name in sorted(targets):
+        if await registry.try_send(name, {
+            "type": "command", "command": cmd, "reply_chat_id": update.effective_chat.id,
+        }):
+            sent.append(name)
+    await update.message.reply_text(f"Command sent to {len(sent)} computer(s): " + (", ".join(sent) if sent else "none online"))
 
 async def tg_scripts(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
     names = registry.all_names()
+    if uid not in ADMIN_IDS:
+        names &= set().union(*(group_computers(g) for g in user_groups(uid)))
     if not names:
         await update.message.reply_text("No computers have connected yet.")
         return
@@ -591,7 +748,7 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only")
         return
-    await update.message.reply_text(f"Panel: {PUBLIC_URL}/admin?key={SECRET_KEY}")
+    await update.message.reply_text(f"Panel: {PANEL_URL}")
 
 
 async def h_keepalive_ping(request: web.Request) -> web.Response:
@@ -813,6 +970,7 @@ async def h_admin(request: web.Request) -> web.Response:
 
 
 async def main() -> None:
+    load_group_state()
     if not SECRET_KEY:
         log.error("FATAL: SECRET_KEY env var is empty — refusing to start (would accept any client).")
         raise SystemExit(1)
@@ -825,6 +983,7 @@ async def main() -> None:
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
+            ("group", tg_group), ("groups", tg_groups), ("moderator", tg_moderator), ("claim", tg_claim),
         ]:
             tg_app.add_handler(CommandHandler(cmd, handler))
         tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, tg_text))
