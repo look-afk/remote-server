@@ -415,6 +415,104 @@ async def tg_group(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f"Group '{name}' saved with {len(computers)} computer(s): " + ", ".join(sorted(computers)))
 
 
+async def tg_renamegroup(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 2:
+        await update.message.reply_text("Usage: /renamegroup <old_name> <new_name>")
+        return
+    old, new = ctx.args[0].strip(), ctx.args[1].strip()
+    if old not in computer_groups:
+        await update.message.reply_text("Group not found.")
+        return
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", new) or new in computer_groups:
+        await update.message.reply_text("New name must be unique and contain 1–32 letters, numbers, _ or -.")
+        return
+    computer_groups[new] = computer_groups.pop(old)
+    for groups in group_moderators.values():
+        if old in groups:
+            groups.remove(old)
+            groups.add(new)
+    save_group_state()
+    await update.message.reply_text(f"Renamed group '{old}' to '{new}'.")
+
+
+async def tg_moderators(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /moderators <group_name>")
+        return
+    group_name = ctx.args[0]
+    if group_name not in computer_groups:
+        await update.message.reply_text("Group not found.")
+        return
+    members = sorted(uid for uid, groups in group_moderators.items() if group_name in groups)
+    await update.message.reply_text(
+        f"Moderators for '{group_name}': " + (", ".join(map(str, members)) if members else "none")
+    )
+
+
+async def tg_modremove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 2:
+        await update.message.reply_text("Usage: /modremove <group_name> <telegram_user_id>")
+        return
+    group_name = ctx.args[0]
+    try:
+        uid = int(ctx.args[1])
+    except ValueError:
+        await update.message.reply_text("Telegram user ID must be a number.")
+        return
+    if group_name not in computer_groups:
+        await update.message.reply_text("Group not found.")
+        return
+    groups = group_moderators.get(uid, set())
+    if group_name not in groups:
+        await update.message.reply_text("That user is not a moderator of this group.")
+        return
+    groups.remove(group_name)
+    if not groups:
+        group_moderators.pop(uid, None)
+    save_group_state()
+    await update.message.reply_text(f"Removed moderator {uid} from '{group_name}'.")
+
+
+async def tg_group_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /<group_name> <client-command>, e.g. /glicey1 shutdown."""
+    message = update.effective_message
+    user = update.effective_user
+    if not message or not user or not message.text:
+        return
+    match = re.match(r"^/([A-Za-z0-9_-]{1,32})(?:@\w+)?(?:\s+(.+))?$", message.text.strip(), re.DOTALL)
+    if not match:
+        return
+    group_name, command = match.group(1), (match.group(2) or "").strip()
+    if group_name not in computer_groups:
+        return
+    if not command:
+        await message.reply_text(f"Usage: /{group_name} <supported_command>")
+        return
+    if not can_manage_group(user.id, group_name):
+        await message.reply_text("You do not have permission to control this group.")
+        return
+    # Only send a command string to clients; the client must explicitly implement it.
+    targets = group_computers(group_name) & set(registry.online_names())
+    sent = []
+    for name in sorted(targets):
+        if await registry.try_send(name, {"type": "command", "command": command,
+                                          "reply_chat_id": message.chat_id}):
+            sent.append(name)
+    await message.reply_text(
+        f"Sent '{command}' to {len(sent)}/{len(targets)} online computer(s) in '{group_name}'."
+        if targets else f"No computers from '{group_name}' are online."
+    )
+
+
 async def tg_groups(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id
     allowed = user_groups(uid)
@@ -984,8 +1082,10 @@ async def main() -> None:
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
             ("group", tg_group), ("groups", tg_groups), ("moderator", tg_moderator), ("claim", tg_claim),
+            ("renamegroup", tg_renamegroup), ("moderators", tg_moderators), ("modremove", tg_modremove),
         ]:
             tg_app.add_handler(CommandHandler(cmd, handler))
+        tg_app.add_handler(MessageHandler(filters.COMMAND, tg_group_command))
         tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, tg_text))
         await tg_app.initialize()
         await tg_app.start()
