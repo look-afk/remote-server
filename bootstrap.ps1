@@ -1,9 +1,12 @@
+param(
+    [string]$SecretKey = $env:PCRC_SECRET_KEY,
+    [string]$ServerUrl = "wss://remote-server-mr8v.onrender.com"
+)
+
 $ErrorActionPreference = "Stop"
 
 $Repo      = "look-afk/remote-server"
 $ZipName   = "dist.zip"
-$SecretKey = "Zafarjon1224"
-$ServerUrl = "wss://remote-server-mr8v.onrender.com"
 $UpdateUrl = "https://raw.githubusercontent.com/look-afk/pcrc-versions/main"
 $InstDir   = "$env:USERPROFILE\PCRC"
 $ReleaseUrl = "https://github.com/$Repo/releases/latest/download/$ZipName"
@@ -11,6 +14,10 @@ $ReleaseUrl = "https://github.com/$Repo/releases/latest/download/$ZipName"
 Write-Host ""
 Write-Host "  PCRC Installer" -ForegroundColor Cyan
 Write-Host ""
+
+while ($SecretKey.Trim() -eq "") {
+    $SecretKey = Read-Host "  Secret key (set via PCRC_SECRET_KEY or -SecretKey; never commit it)"
+}
 
 $PCName = ""
 while ($PCName.Trim() -eq "") {

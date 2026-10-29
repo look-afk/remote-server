@@ -27,8 +27,40 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com")
 PORT = int(os.getenv("PORT", 8080))
 UPDATE_VERSION = int(os.getenv("UPDATE_VERSION", "1"))
 UPDATE_EXE_URL = os.getenv("UPDATE_EXE_URL", "")
-PANEL_URL = "https://remote-server-mr8v.onrender.com/admin?key=Zafarjon1224"
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")  # separate from SECRET_KEY; falls back if unset
+PANEL_URL = PUBLIC_URL.rstrip("/") + "/admin"
 GROUPS_FILE = Path(os.getenv("GROUPS_FILE", "remote_groups.json"))
+AUDIT_FILE = Path(os.getenv("AUDIT_FILE", "audit.log"))
+MODERATOR_ALLOWED_COMMANDS = {
+    c.strip().lower()
+    for c in os.getenv(
+        "MODERATOR_ALLOWED_COMMANDS",
+        "status,sysinfo,cpu,ram,disk,uptime,battery,screenshot,screen_size,processes,help,notify",
+    ).split(",")
+    if c.strip()
+}
+
+
+def audit(actor: str, action: str, target: str = "", detail: str = "", result: str = "") -> None:
+    """Append one JSON-line audit record. Never pass secrets into detail/result."""
+    entry = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "actor": actor,
+        "action": action,
+        "target": target,
+        "detail": detail[:200],
+        "result": str(result)[:200],
+    }
+    try:
+        with AUDIT_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        log.warning("audit write failed: %s", e)
+
+
+def _first_token(cmd: str) -> str:
+    cmd = cmd.strip()
+    return cmd.split(None, 1)[0].lower() if cmd else ""
 
 
 class ClientRegistry:
@@ -327,6 +359,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 if mtype == "register":
                     name = (data.get("name") or data.get("pc_name") or data.get("script_name") or "").strip()
                     if data.get("secret", "") != SECRET_KEY:
+                        audit("client", "register", name, result="rejected: invalid secret")
                         await ws.send_json({"type": "error", "msg": "Invalid secret key"})
                         await ws.close()
                         return ws
@@ -336,6 +369,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                         return ws
                     client_name = name
                     registry.register(name, ws)
+                    audit("client", "register", name, result="ok")
                     log.info(f"+ {name} registered")
                     await ws.send_json({"type": "ok"})
 
@@ -500,6 +534,13 @@ async def tg_group_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
     if not can_manage_group(user.id, group_name):
         await message.reply_text("You do not have permission to control this group.")
         return
+    if user.id not in ADMIN_IDS and _first_token(command) not in MODERATOR_ALLOWED_COMMANDS:
+        audit(f"tg:{user.id}", "group_command", group_name, command, "denied: not in moderator allowlist")
+        await message.reply_text(
+            "Command is not in the moderator allowlist. Allowed: "
+            + ", ".join(sorted(MODERATOR_ALLOWED_COMMANDS))
+        )
+        return
     # Only send a command string to clients; the client must explicitly implement it.
     targets = group_computers(group_name) & set(registry.online_names())
     sent = []
@@ -507,6 +548,7 @@ async def tg_group_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
         if await registry.try_send(name, {"type": "command", "command": command,
                                           "reply_chat_id": message.chat_id}):
             sent.append(name)
+    audit(f"tg:{user.id}", "group_command", group_name, command, f"sent={len(sent)}/{len(targets)}")
     await message.reply_text(
         f"Sent '{command}' to {len(sent)}/{len(targets)} online computer(s) in '{group_name}'."
         if targets else f"No computers from '{group_name}' are online."
@@ -567,6 +609,7 @@ async def tg_claim(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
     group_moderators.setdefault(uid, set()).add(group_name)
     save_group_state()
+    audit(f"tg:{uid}", "claim_moderator", group_name, result="activated")
     await update.message.reply_text(
         f"Moderator access activated for '{group_name}'. Use /groups, /scripts, /online, /offline, "
         "/send and /broadcast with this group."
@@ -628,6 +671,7 @@ async def tg_bind(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("telegram_user_id must be a number.")
         return
     ok, msg = do_bind(uid, ctx.args[1])
+    audit(f"tg:{update.effective_user.id}", "bind", ctx.args[1], f"user_id={uid}", msg)
     await update.message.reply_text(msg)
 
 
@@ -639,6 +683,7 @@ async def tg_unbind(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /unbind <telegram_user_id | computer>")
         return
     ok, msg = do_unbind(ctx.args[0])
+    audit(f"tg:{update.effective_user.id}", "unbind", ctx.args[0], result=msg)
     await update.message.reply_text(msg)
 
 
@@ -651,6 +696,7 @@ async def tg_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /remove <computer name>")
         return
     ok, msg = do_remove(pc_name)
+    audit(f"tg:{update.effective_user.id}", "remove_pc", pc_name, result=msg)
     await update.message.reply_text(msg)
 
 
@@ -777,12 +823,20 @@ async def tg_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not can_manage_group(uid, group_name) or name not in group_computers(group_name):
             await update.message.reply_text("You do not have permission to control that computer in this group.")
             return
+        if _first_token(cmd) not in MODERATOR_ALLOWED_COMMANDS:
+            audit(f"tg:{uid}", "send", name, cmd, "denied: not in moderator allowlist")
+            await update.message.reply_text(
+                "Command is not in the moderator allowlist. Allowed: "
+                + ", ".join(sorted(MODERATOR_ALLOWED_COMMANDS))
+            )
+            return
     if name not in registry.all_names():
         await update.message.reply_text(f"Computer '{name}' was not found.")
         return
     ok = await registry.try_send(name, {
         "type": "command", "command": cmd, "reply_chat_id": update.effective_chat.id,
     })
+    audit(f"tg:{uid}", "send", name, cmd, "sent" if ok else "offline")
     await update.message.reply_text(f"Sent to {name}: {cmd}" if ok else f"{name} is offline. Last seen: {registry.last_seen.get(name, 'never')}")
 
 
@@ -804,6 +858,13 @@ async def tg_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not can_manage_group(uid, group_name):
             await update.message.reply_text("You do not have permission to manage that group.")
             return
+        if _first_token(cmd) not in MODERATOR_ALLOWED_COMMANDS:
+            audit(f"tg:{uid}", "broadcast", group_name, cmd, "denied: not in moderator allowlist")
+            await update.message.reply_text(
+                "Command is not in the moderator allowlist. Allowed: "
+                + ", ".join(sorted(MODERATOR_ALLOWED_COMMANDS))
+            )
+            return
         targets = group_computers(group_name) & set(registry.online_names())
     sent = []
     for name in sorted(targets):
@@ -811,6 +872,7 @@ async def tg_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "type": "command", "command": cmd, "reply_chat_id": update.effective_chat.id,
         }):
             sent.append(name)
+    audit(f"tg:{uid}", "broadcast", ",".join(sorted(sent)) or "-", cmd, f"count={len(sent)}")
     await update.message.reply_text(f"Command sent to {len(sent)} computer(s): " + (", ".join(sent) if sent else "none online"))
 
 async def tg_scripts(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -846,7 +908,11 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only")
         return
-    await update.message.reply_text(f"Panel: {PANEL_URL}")
+    await update.message.reply_text(
+        f"Panel: {PANEL_URL}\n"
+        "The panel will ask for the admin key (ADMIN_API_KEY) on first open. "
+        "Do not share the key or a link containing it."
+    )
 
 
 async def h_keepalive_ping(request: web.Request) -> web.Response:
@@ -863,7 +929,9 @@ async def h_status(request: web.Request) -> web.Response:
 
 
 def _check_admin(request: web.Request) -> bool:
-    return request.headers.get("X-Admin-Key", "") == SECRET_KEY
+    key = request.headers.get("X-Admin-Key", "")
+    expected = ADMIN_API_KEY or SECRET_KEY
+    return bool(expected) and key == expected
 
 
 async def h_scripts(request: web.Request) -> web.Response:
@@ -904,6 +972,7 @@ async def h_bind(request: web.Request) -> web.Response:
     except Exception:
         return web.json_response({"error": "Bad request — need user_id (int) and pc_name"}, status=400)
     ok, msg = do_bind(uid, pc_name)
+    audit("api", "bind", pc_name, f"user_id={uid}", msg)
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
 
@@ -918,6 +987,7 @@ async def h_unbind(request: web.Request) -> web.Response:
     if not target:
         return web.json_response({"error": "target required"}, status=400)
     ok, msg = do_unbind(target)
+    audit("api", "unbind", target, result=msg)
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
 
@@ -937,6 +1007,7 @@ async def h_send(request: web.Request) -> web.Response:
         "command": cmd,
         "reply_chat_id": data.get("reply_chat_id"),
     })
+    audit("api", "send", name, cmd, "sent" if ok else "not connected")
     return web.json_response({"status": "sent"} if ok else {"error": "not connected"}, status=200 if ok else 503)
 
 
@@ -958,6 +1029,7 @@ async def h_broadcast(request: web.Request) -> web.Response:
                 sent.append(name)
             except Exception:
                 pass
+    audit("api", "broadcast", ",".join(sorted(sent)) or "-", cmd, f"count={len(sent)}")
     return web.json_response({"sent_to": sent, "count": len(sent)})
 
 
@@ -1015,7 +1087,8 @@ ADMIN_HTML = """<!doctype html>
 <pre id="log">ready</pre>
 
 <script>
-const KEY = new URLSearchParams(location.search).get("key") || "";
+const KEY = new URLSearchParams(location.search).get("key") || sessionStorage.getItem("admin_key") || prompt("Enter admin key:") || "";
+if (KEY) sessionStorage.setItem("admin_key", KEY);
 const H = {"X-Admin-Key": KEY, "Content-Type": "application/json"};
 
 async function refresh() {
@@ -1072,6 +1145,13 @@ async def main() -> None:
     if not SECRET_KEY:
         log.error("FATAL: SECRET_KEY env var is empty — refusing to start (would accept any client).")
         raise SystemExit(1)
+    if not ADMIN_API_KEY:
+        log.warning(
+            "ADMIN_API_KEY is not set — admin API falls back to SECRET_KEY. "
+            "Set a separate ADMIN_API_KEY so client and admin credentials differ."
+        )
+    elif ADMIN_API_KEY == SECRET_KEY:
+        log.warning("ADMIN_API_KEY equals SECRET_KEY — use a separate value for the admin API.")
 
     global tg_app
     if BOT_TOKEN:
