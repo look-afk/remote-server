@@ -950,7 +950,7 @@ async function refreshPlugins() {
     const list = document.createElement("div");
     const plugins = computer.plugins || [];
     list.textContent = plugins.length
-      ? plugins.map(p => p.name + " v" + (p.version || "?") + " — commands: " + ((p.commands || []).join(", ") || "none")).join("\n")
+      ? plugins.map(p => p.name + " v" + (p.version || "?") + " — commands: " + ((p.commands || []).join(", ") || "none")).join("\\n")
       : "No plugin metadata reported yet. Reconnect the client to refresh.";
     list.style.whiteSpace = "pre-wrap";
     list.style.marginTop = "6px";
