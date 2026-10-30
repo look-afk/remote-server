@@ -165,6 +165,8 @@ class ClientRegistry:
 
 registry = ClientRegistry()
 tg_app: Application | None = None
+# Latest plugin metadata reported by each authenticated client.
+client_plugins: dict[str, list[dict]] = {}
 
 USER_COMMANDS = {
     "Power off": "shutdown",
@@ -180,9 +182,61 @@ USER_MENU = ReplyKeyboardMarkup(
         ["Screenshot", "Lock screen"],
         ["System info", "Battery"],
         ["Restart", "Power off"],
+        ["Plugins"],
     ],
     resize_keyboard=True,
 )
+
+# Plugin-management commands must never be exposed to regular users.
+USER_BLOCKED_PLUGIN_COMMANDS = {"plugin_install", "plugin_unload", "plugin_delete"}
+
+
+def normalize_plugin_info(raw: object) -> list[dict]:
+    """Accept only a small, JSON-safe plugin catalogue from an authenticated client."""
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw[:100]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", ""))[:80]
+        if not name:
+            continue
+        raw_commands = item.get("commands", [])
+        commands = []
+        if isinstance(raw_commands, list):
+            for command in raw_commands[:100]:
+                command = str(command).strip().lower()
+                if re.fullmatch(r"[a-z0-9_]{1,64}", command) and command not in USER_BLOCKED_PLUGIN_COMMANDS:
+                    commands.append(command)
+        result.append({
+            "name": name,
+            "version": str(item.get("version", ""))[:40],
+            "description": str(item.get("description", ""))[:240],
+            "commands": sorted(set(commands)),
+        })
+    return result
+
+
+def plugin_commands_for(pc_name: str) -> set[str]:
+    return {
+        command
+        for plugin in client_plugins.get(pc_name, [])
+        for command in plugin.get("commands", [])
+    }
+
+
+def format_plugins(pc_name: str) -> str:
+    plugins = client_plugins.get(pc_name, [])
+    if not plugins:
+        return f"No plugin information received from {pc_name} yet. Make sure the client is online and has loaded its plugins."
+    lines = [f"Plugins on {pc_name}:"]
+    for plugin in plugins:
+        commands = ", ".join(plugin.get("commands", [])) or "no commands"
+        description = f" — {plugin['description']}" if plugin.get("description") else ""
+        lines.append(f"• {plugin['name']} v{plugin['version']}{description}\n  Commands: {commands}")
+    lines.append("\nSend a command name with its arguments to run it on your bound computer.")
+    return "\n".join(lines)[:3900]
 
 # pc_name -> session metadata. The WebSocket itself is still owned by ClientRegistry.
 active_sessions: dict[str, dict] = {}
@@ -393,6 +447,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                         return ws
                     client_name = name
                     registered = True
+                    client_plugins[name] = normalize_plugin_info(data.get("plugins", []))
                     registry.register(name, ws)
                     audit("client", "register", name, result="ok")
                     log.info(f"+ {name} registered")
@@ -446,9 +501,16 @@ async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
+    bound_pc = user_bindings.get(update.effective_user.id)
+    if bound_pc:
+        await update.message.reply_text(
+            f"Connected to {bound_pc}. Choose an action below.",
+            reply_markup=USER_MENU,
+        )
+        return
     await update.message.reply_text(
         "To connect this chat to a computer, ask the admin for a one-time pairing "
-        "code (/claim is also used for moderator codes), then send it here.",
+        "code, then send /claim <code> here.",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -824,6 +886,17 @@ async def tg_online(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("\n".join(lines))
 
 
+async def tg_plugins(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    pc_name = user_bindings.get(user_id)
+    if not pc_name:
+        await update.message.reply_text(
+            "Your Telegram account is not connected to a computer. Ask the admin for a pairing code and send /claim <code>."
+        )
+        return
+    await update.message.reply_text(format_plugins(pc_name), reply_markup=USER_MENU)
+
+
 async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     text = (update.message.text or "").strip()
@@ -843,11 +916,30 @@ async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     bound_pc = user_bindings.get(user_id)
     if bound_pc:
-        if text not in USER_COMMANDS:
-            await update.message.reply_text("Choose a command from the menu.", reply_markup=USER_MENU)
+        if text.strip().lower() == "plugins":
+            await update.message.reply_text(format_plugins(bound_pc), reply_markup=USER_MENU)
             return
 
-        cmd = USER_COMMANDS[text]
+        if text in USER_COMMANDS:
+            cmd = USER_COMMANDS[text]
+        else:
+            # Regular users may invoke only commands advertised by plugins on
+            # their own paired computer; no chaining or arbitrary core commands.
+            parts = text.split(None, 1)
+            plugin_cmd = parts[0].lower() if parts else ""
+            if (
+                not plugin_cmd
+                or " /and " in text.lower()
+                or plugin_cmd not in plugin_commands_for(bound_pc)
+                or plugin_cmd in USER_BLOCKED_PLUGIN_COMMANDS
+            ):
+                await update.message.reply_text(
+                    "Choose a menu action or tap Plugins to see the commands available on your computer.",
+                    reply_markup=USER_MENU,
+                )
+                return
+            cmd = text
+
         ok = await registry.try_send(bound_pc, {
             "type": "command",
             "command": cmd,
@@ -1027,6 +1119,20 @@ async def h_scripts(request: web.Request) -> web.Response:
     return web.json_response({"scripts": scripts, "history": registry.history[-30:]})
 
 
+async def h_plugins(request: web.Request) -> web.Response:
+    if not _check_admin(request):
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    plugins = [
+        {
+            "name": name,
+            "connected": registry.is_alive(registry.clients.get(name)),
+            "plugins": client_plugins.get(name, []),
+        }
+        for name in sorted(registry.all_names())
+    ]
+    return web.json_response({"computers": plugins})
+
+
 async def h_users(request: web.Request) -> web.Response:
     if not _check_admin(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
@@ -1149,6 +1255,8 @@ ADMIN_HTML = """<!doctype html>
 <h2>Online</h2><div id="online"></div>
 <h2>Offline</h2><div id="offline"></div>
 
+<h2>Plugins <button onclick="refreshPlugins()">Refresh</button></h2><div id="plugins"><small>Loading plugin inventory...</small></div>
+
 <h2>Users</h2><div id="users"></div>
 <div class="row">
   <input id="bind-uid" placeholder="Telegram user id">
@@ -1187,6 +1295,39 @@ async function refresh() {
   document.getElementById("users").innerHTML = (ud.users || []).map(u =>
     '<div class="card">user ' + u.user_id + ' &rarr; ' + u.pc_name + ' (' + (u.connected ? "online" : "offline") + ')</div>'
   ).join("") || "<small>none</small>";
+  await refreshPlugins();
+}
+
+async function refreshPlugins() {
+  const box = document.getElementById("plugins");
+  const r = await fetch("/api/plugins", {headers: H});
+  const data = await r.json();
+  if (!r.ok || data.error) {
+    box.textContent = data.error || "Unable to load plugins.";
+    return;
+  }
+  box.replaceChildren();
+  const computers = data.computers || [];
+  if (!computers.length) {
+    box.textContent = "No computers registered.";
+    return;
+  }
+  for (const computer of computers) {
+    const card = document.createElement("div");
+    card.className = "card " + (computer.connected ? "online" : "offline");
+    const title = document.createElement("strong");
+    title.textContent = computer.name + (computer.connected ? " (online)" : " (offline)");
+    card.appendChild(title);
+    const list = document.createElement("div");
+    const plugins = computer.plugins || [];
+    list.textContent = plugins.length
+      ? plugins.map(p => p.name + " v" + (p.version || "?") + " — commands: " + ((p.commands || []).join(", ") || "none")).join("\\n")
+      : "No plugin metadata reported yet. Reconnect the client to refresh.";
+    list.style.whiteSpace = "pre-wrap";
+    list.style.marginTop = "6px";
+    card.appendChild(list);
+    box.appendChild(card);
+  }
 }
 
 async function doBind() {
@@ -1240,7 +1381,7 @@ async def main() -> None:
     if BOT_TOKEN:
         tg_app = Application.builder().token(BOT_TOKEN).build()
         for cmd, handler in [
-            ("start", tg_start_v2), ("send", tg_send), ("broadcast", tg_broadcast),
+            ("start", tg_start_v2), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
@@ -1265,6 +1406,7 @@ async def main() -> None:
     app.router.add_get("/api/status", h_status)
     app.router.add_get("/api/scripts", h_scripts)
     app.router.add_get("/api/users", h_users)
+    app.router.add_get("/api/plugins", h_plugins)
     app.router.add_post("/api/bind", h_bind)
     app.router.add_post("/api/unbind", h_unbind)
     app.router.add_post("/api/send", h_send)
