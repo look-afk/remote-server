@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import secrets as _secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,55 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com")
 PORT = int(os.getenv("PORT", 8080))
 UPDATE_VERSION = int(os.getenv("UPDATE_VERSION", "1"))
 UPDATE_EXE_URL = os.getenv("UPDATE_EXE_URL", "")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")  # REQUIRED, separate from SECRET_KEY — no fallback
+PANEL_URL = PUBLIC_URL.rstrip("/") + "/admin"
+GROUPS_FILE = Path(os.getenv("GROUPS_FILE", "remote_groups.json"))
+AUDIT_FILE = Path(os.getenv("AUDIT_FILE", "audit.log"))
+MODERATOR_ALLOWED_COMMANDS = {
+    c.strip().lower()
+    for c in os.getenv(
+        "MODERATOR_ALLOWED_COMMANDS",
+        "status,sysinfo,cpu,ram,disk,uptime,battery,screenshot,screen_size,processes,help,notify",
+    ).split(",")
+    if c.strip()
+}
+
+
+def audit(actor: str, action: str, target: str = "", detail: str = "", result: str = "") -> None:
+    """Append one JSON-line audit record. Never pass secrets into detail/result."""
+    entry = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "actor": actor,
+        "action": action,
+        "target": target,
+        "detail": detail[:200],
+        "result": str(result)[:200],
+    }
+    try:
+        with AUDIT_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        log.warning("audit write failed: %s", e)
+
+
+def _first_token(cmd: str) -> str:
+    cmd = cmd.strip()
+    return cmd.split(None, 1)[0].lower() if cmd else ""
+
+
+def _chain_parts(cmd: str) -> list[str]:
+    """Split a possibly-chained '/and'-command into its individual parts."""
+    return [p.strip() for p in cmd.split(" /and ") if p.strip()]
+
+
+def _all_segments_allowed(cmd: str) -> bool:
+    """
+    FIX: previously only the first segment of an '/and'-chain was checked
+    against the moderator allowlist, so 'status /and shutdown' slipped
+    privileged commands past moderators. Every segment must now be allowed.
+    """
+    parts = _chain_parts(cmd) or [cmd]
+    return all(_first_token(p) in MODERATOR_ALLOWED_COMMANDS for p in parts)
 
 
 class ClientRegistry:
@@ -139,6 +189,48 @@ active_sessions: dict[str, dict] = {}
 
 # tg_user_id -> pc_name
 user_bindings: dict[int, str] = {}
+# group_name -> set of computer names; moderator codes are one-time and expire after use.
+computer_groups: dict[str, set[str]] = {}
+moderator_codes: dict[str, dict] = {}
+# Telegram user id -> set of group names
+group_moderators: dict[int, set[str]] = {}
+
+# FIX: a computer's name is no longer sufficient to bind to it — that name
+# leaks to anyone who can reach /api/status or who overhears a Telegram
+# conversation. Binding now requires a one-time admin-issued pairing code.
+# code -> pc_name
+pairing_codes: dict[str, str] = {}
+
+
+def load_group_state() -> None:
+    global computer_groups, group_moderators
+    try:
+        data = json.loads(GROUPS_FILE.read_text(encoding="utf-8"))
+        computer_groups = {str(k): set(v) for k, v in data.get("groups", {}).items()}
+        group_moderators = {int(k): set(v) for k, v in data.get("moderators", {}).items()}
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log.warning("Could not load group state: %s", e)
+
+def save_group_state() -> None:
+    try:
+        payload = {"groups": {k: sorted(v) for k, v in computer_groups.items()},
+                   "moderators": {str(k): sorted(v) for k, v in group_moderators.items()}}
+        GROUPS_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        log.error("Could not save group state: %s", e)
+
+def can_manage_group(user_id: int, group_name: str) -> bool:
+    return user_id in ADMIN_IDS or group_name in group_moderators.get(user_id, set())
+
+def user_groups(user_id: int) -> set[str]:
+    if user_id in ADMIN_IDS:
+        return set(computer_groups)
+    return set(group_moderators.get(user_id, set()))
+
+def group_computers(group_name: str) -> set[str]:
+    return computer_groups.get(group_name, set())
 
 
 def do_bind(user_id: int, pc_name: str) -> tuple[bool, str]:
@@ -180,6 +272,29 @@ def do_unbind(target: str) -> tuple[bool, str]:
             active_sessions[pc]["tg_user_id"] = None
             return True, f"Unbound {pc} from user {uid}."
         return False, f"{pc} had no user bound."
+
+
+def do_remove(pc_name: str) -> tuple[bool, str]:
+    """Remove a stale offline computer from the server registry and related bindings."""
+    pc_name = pc_name.strip()
+    if not pc_name:
+        return False, "Computer name is required."
+
+    if pc_name not in registry.all_names() and pc_name not in active_sessions:
+        return False, f"Computer '{pc_name}' was not found."
+
+    if registry.is_alive(registry.clients.get(pc_name)):
+        return False, f"'{pc_name}' is online. /remove only removes offline entries."
+
+    registry.clients.pop(pc_name, None)
+    registry.last_seen.pop(pc_name, None)
+    active_sessions.pop(pc_name, None)
+
+    removed_users = [uid for uid, bound_pc in user_bindings.items() if bound_pc == pc_name]
+    for uid in removed_users:
+        user_bindings.pop(uid, None)
+
+    return True, f"Removed '{pc_name}' from the server list. Local files were not deleted."
 
 
 def _extract_image_bytes(text: str) -> bytes | None:
@@ -256,6 +371,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse(heartbeat=25)
     await ws.prepare(request)
     client_name = None
+    registered = False
     try:
         async for msg in ws:
             if msg.type != web.WSMsgType.TEXT:
@@ -267,6 +383,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 if mtype == "register":
                     name = (data.get("name") or data.get("pc_name") or data.get("script_name") or "").strip()
                     if data.get("secret", "") != SECRET_KEY:
+                        audit("client", "register", name, result="rejected: invalid secret")
                         await ws.send_json({"type": "error", "msg": "Invalid secret key"})
                         await ws.close()
                         return ws
@@ -275,11 +392,17 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                         await ws.close()
                         return ws
                     client_name = name
+                    registered = True
                     registry.register(name, ws)
+                    audit("client", "register", name, result="ok")
                     log.info(f"+ {name} registered")
                     await ws.send_json({"type": "ok"})
 
                 elif mtype == "result":
+                    # FIX: only an already-registered socket may push results
+                    # (and thus relay arbitrary text to a Telegram chat_id).
+                    if not registered:
+                        continue
                     cmd = data.get("command", "")
                     result = data.get("result", "")
                     chat_id = data.get("reply_chat_id")
@@ -305,27 +428,284 @@ async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "Remote Control Admin\n\n"
             "Use /scripts to see connected computers (grouped online/offline).\n"
             "Use /offline or /online to see just one group.\n"
+            "Use /remove <computer> to remove a stale offline entry.\n"
             "Use /send <computer> <command> to run one command.\n"
-            "Use /broadcast <command> to run a command on every online computer.\n\n"
+            "Use /broadcast <command> to run a command on every online computer.\n"
+            "Use /group <n> <computer...> to create a group.\n"
+            "Use /groups to list groups.\n"
+            "Use /moderator <group> to create a one-time moderator code.\n"
+            "Use /pair <computer> to create a one-time pairing code for a user.\n\n"
             "Users:\n"
             "/users — list Telegram users bound to computers\n"
             "/bind <telegram_user_id> <computer> — link a user to a computer\n"
             "/unbind <telegram_user_id | computer> — remove a link\n\n"
             "Other:\n"
+            "/remove <computer> — remove an offline computer from the lists\n"
             "/sessions\n"
             "/panel — web admin panel link"
         )
         return
 
     await update.message.reply_text(
-        "Send your computer name to connect. Ask the admin if you do not know it.",
+        "To connect this chat to a computer, ask the admin for a one-time pairing "
+        "code (/claim is also used for moderator codes), then send it here.",
         reply_markup=ReplyKeyboardRemove(),
     )
 
 
-async def tg_sessions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+async def tg_pair(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: create a one-time pairing code so a user can self-bind to a computer."""
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /pair <computer_name>")
+        return
+    pc_name = ctx.args[0].strip()
+    if pc_name not in registry.all_names():
+        await update.message.reply_text(f"Computer '{pc_name}' not found.")
+        return
+    code = _secrets.token_urlsafe(8)
+    pairing_codes[code] = pc_name
+    audit(f"tg:{update.effective_user.id}", "pair_issue", pc_name, result="ok")
+    await update.message.reply_text(
+        f"Pairing code for '{pc_name}':\n{code}\n\n"
+        "Send this code to the intended user. It works once; do not post it publicly."
+    )
+
+
+async def tg_group(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Create/update a group: /group <n> <computer1> <computer2> ..."""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only. Only the main admin can create or edit groups.")
+        return
+    if len(ctx.args) < 2:
+        await update.message.reply_text(
+            "Usage: /group <group_name> <computer1> <computer2> ...\n"
+            "Example: /group group1 PC-Home PC-Laptop\n"
+            "Use /groups to list groups. Computer names must already have connected at least once."
+        )
+        return
+    name = ctx.args[0].strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+        await update.message.reply_text("Group name must be 1–40 characters: letters, numbers, _ or -.")
+        return
+    computers = set(ctx.args[1:])
+    known = registry.all_names()
+    missing = sorted(computers - known)
+    if missing:
+        await update.message.reply_text("Unknown computer(s): " + ", ".join(missing))
+        return
+    computer_groups[name] = computers
+    save_group_state()
+    audit(f"tg:{update.effective_user.id}", "group_create", name, result=f"{len(computers)} computers")
+    await update.message.reply_text(f"Group '{name}' saved with {len(computers)} computer(s): " + ", ".join(sorted(computers)))
+
+
+async def tg_renamegroup(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 2:
+        await update.message.reply_text("Usage: /renamegroup <old_name> <new_name>")
+        return
+    old, new = ctx.args[0].strip(), ctx.args[1].strip()
+    if old not in computer_groups:
+        await update.message.reply_text("Group not found.")
+        return
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", new) or new in computer_groups:
+        await update.message.reply_text("New name must be unique and contain 1–32 letters, numbers, _ or -.")
+        return
+    computer_groups[new] = computer_groups.pop(old)
+    for groups in group_moderators.values():
+        if old in groups:
+            groups.remove(old)
+            groups.add(new)
+    save_group_state()
+    audit(f"tg:{update.effective_user.id}", "group_rename", f"{old}->{new}", result="ok")
+    await update.message.reply_text(f"Renamed group '{old}' to '{new}'.")
+
+
+async def tg_moderators(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /moderators <group_name>")
+        return
+    group_name = ctx.args[0]
+    if group_name not in computer_groups:
+        await update.message.reply_text("Group not found.")
+        return
+    members = sorted(uid for uid, groups in group_moderators.items() if group_name in groups)
+    await update.message.reply_text(
+        f"Moderators for '{group_name}': " + (", ".join(map(str, members)) if members else "none")
+    )
+
+
+async def tg_modremove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 2:
+        await update.message.reply_text("Usage: /modremove <group_name> <telegram_user_id>")
+        return
+    group_name = ctx.args[0]
+    try:
+        uid = int(ctx.args[1])
+    except ValueError:
+        await update.message.reply_text("Telegram user ID must be a number.")
+        return
+    if group_name not in computer_groups:
+        await update.message.reply_text("Group not found.")
+        return
+    groups = group_moderators.get(uid, set())
+    if group_name not in groups:
+        await update.message.reply_text("That user is not a moderator of this group.")
+        return
+    groups.remove(group_name)
+    if not groups:
+        group_moderators.pop(uid, None)
+    save_group_state()
+    audit(f"tg:{update.effective_user.id}", "mod_remove", group_name, f"user_id={uid}", "ok")
+    await update.message.reply_text(f"Removed moderator {uid} from '{group_name}'.")
+
+
+async def tg_group_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /<group_name> <client-command>, e.g. /glicey1 shutdown."""
+    message = update.effective_message
+    user = update.effective_user
+    if not message or not user or not message.text:
+        return
+    match = re.match(r"^/([A-Za-z0-9_-]{1,32})(?:@\w+)?(?:\s+(.+))?$", message.text.strip(), re.DOTALL)
+    if not match:
+        return
+    group_name, command = match.group(1), (match.group(2) or "").strip()
+    if group_name not in computer_groups:
+        return
+    if not command:
+        await message.reply_text(f"Usage: /{group_name} <supported_command>")
+        return
+    if not can_manage_group(user.id, group_name):
+        await message.reply_text("You do not have permission to control this group.")
+        return
+    # FIX: every segment of an '/and' chain must be allowed, not just the first.
+    if user.id not in ADMIN_IDS and not _all_segments_allowed(command):
+        audit(f"tg:{user.id}", "group_command", group_name, command, "denied: not in moderator allowlist")
+        await message.reply_text(
+            "Command is not in the moderator allowlist. Allowed: "
+            + ", ".join(sorted(MODERATOR_ALLOWED_COMMANDS))
+        )
+        return
+    # Only send a command string to clients; the client must explicitly implement it.
+    targets = group_computers(group_name) & set(registry.online_names())
+    sent = []
+    for name in sorted(targets):
+        if await registry.try_send(name, {"type": "command", "command": command,
+                                          "reply_chat_id": message.chat_id}):
+            sent.append(name)
+    audit(f"tg:{user.id}", "group_command", group_name, command, f"sent={len(sent)}/{len(targets)}")
+    await message.reply_text(
+        f"Sent '{command}' to {len(sent)}/{len(targets)} online computer(s) in '{group_name}'."
+        if targets else f"No computers from '{group_name}' are online."
+    )
+
+
+async def tg_groups(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id
+    allowed = user_groups(uid)
+    if not allowed:
+        await update.message.reply_text("No groups available. Admin: create one with /group.")
+        return
+    lines = ["Groups you can manage:", ""]
+    for name in sorted(allowed):
+        members = sorted(group_computers(name))
+        lines.append(f"{name} ({len(members)} computers): " + (", ".join(members) if members else "empty"))
+    await update.message.reply_text("\n".join(lines))
+
+
+async def tg_moderator(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Create a one-time activation code for a group moderator."""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    if len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /moderator <group_name>")
+        return
+    group_name = ctx.args[0]
+    if group_name not in computer_groups:
+        await update.message.reply_text("Group not found. Create it first with /group.")
+        return
+    code = _secrets.token_urlsafe(8)
+    moderator_codes[code] = {"group": group_name, "created_by": update.effective_user.id}
+    audit(f"tg:{update.effective_user.id}", "moderator_code_issue", group_name, result="ok")
+    await update.message.reply_text(
+        f"Moderator activation code for '{group_name}':\n{code}\n\n"
+        "Send this code to the intended account owner. They must open this bot and send /claim CODE. "
+        "The code works once; do not post it publicly."
+    )
+
+
+async def tg_claim(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /claim <code> handles BOTH kinds of one-time codes:
+      - moderator activation codes (from /moderator)
+      - pairing codes that bind a user to a single computer (from /pair)
+    FIX: this replaces the old behaviour where typing a computer's bare
+    name was enough to bind to it.
+    """
+    if not ctx.args or len(ctx.args) != 1:
+        await update.message.reply_text("Usage: /claim <code>")
+        return
+    uid = update.effective_user.id
+    code = ctx.args[0]
+
+    if code in pairing_codes:
+        pc_name = pairing_codes.pop(code)
+        if pc_name not in registry.all_names():
+            await update.message.reply_text("That computer no longer exists.")
+            return
+        existing_user = active_sessions.get(pc_name, {}).get("tg_user_id")
+        if existing_user and existing_user != uid:
+            await update.message.reply_text("This computer is already linked to another Telegram user.")
+            return
+        user_bindings[uid] = pc_name
+        active_sessions.setdefault(pc_name, {
+            "pc_name": pc_name,
+            "ws": registry.clients.get(pc_name),
+            "connected": registry.is_alive(registry.clients.get(pc_name)),
+            "last_seen": registry.last_seen.get(pc_name, "never"),
+        })
+        active_sessions[pc_name]["tg_user_id"] = uid
+        audit(f"tg:{uid}", "claim_pairing", pc_name, result="bound")
+        await update.message.reply_text(f"Connected to {pc_name}.", reply_markup=USER_MENU)
+        await notify_admins(f"User {uid} connected to {pc_name} via pairing code.")
+        return
+
+    if uid in ADMIN_IDS:
+        await update.message.reply_text("You are already a main admin.")
+        return
+    entry = moderator_codes.pop(code, None)
+    if not entry:
+        await update.message.reply_text("Invalid or already-used code.")
+        return
+    group_name = entry["group"]
+    if group_name not in computer_groups:
+        await update.message.reply_text("That group no longer exists.")
+        return
+    group_moderators.setdefault(uid, set()).add(group_name)
+    save_group_state()
+    audit(f"tg:{uid}", "claim_moderator", group_name, result="activated")
+    await update.message.reply_text(
+        f"Moderator access activated for '{group_name}'. Use /groups, /scripts, /online, /offline, "
+        "/send and /broadcast with this group."
+    )
+
+
+async def tg_sessions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
 
     if not active_sessions:
@@ -333,7 +713,11 @@ async def tg_sessions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     lines = ["Active sessions", ""]
+    allowed_groups = user_groups(uid)
+    allowed_computers = set().union(*(group_computers(g) for g in allowed_groups)) if allowed_groups else set()
     for name in sorted(active_sessions):
+        if uid not in ADMIN_IDS and name not in allowed_computers:
+            continue
         session = active_sessions[name]
         connected = "Online" if session.get("connected") else "Offline"
         user_id = session.get("tg_user_id") or "not bound"
@@ -373,6 +757,7 @@ async def tg_bind(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("telegram_user_id must be a number.")
         return
     ok, msg = do_bind(uid, ctx.args[1])
+    audit(f"tg:{update.effective_user.id}", "bind", ctx.args[1], f"user_id={uid}", msg)
     await update.message.reply_text(msg)
 
 
@@ -384,15 +769,33 @@ async def tg_unbind(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /unbind <telegram_user_id | computer>")
         return
     ok, msg = do_unbind(ctx.args[0])
+    audit(f"tg:{update.effective_user.id}", "unbind", ctx.args[0], result=msg)
+    await update.message.reply_text(msg)
+
+
+async def tg_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only")
+        return
+    pc_name = " ".join(ctx.args).strip()
+    if not pc_name:
+        await update.message.reply_text("Usage: /remove <computer name>")
+        return
+    ok, msg = do_remove(pc_name)
+    audit(f"tg:{update.effective_user.id}", "remove_pc", pc_name, result=msg)
     await update.message.reply_text(msg)
 
 
 async def tg_offline(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
     online = set(registry.online_names())
-    offline = sorted(n for n in registry.all_names() if n not in online)
+    names = registry.all_names()
+    if uid not in ADMIN_IDS:
+        names &= set().union(*(group_computers(g) for g in user_groups(uid)))
+    offline = sorted(n for n in names if n not in online)
     if not offline:
         await update.message.reply_text("All computers are online.")
         return
@@ -403,10 +806,14 @@ async def tg_offline(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def tg_online(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
-    online = sorted(registry.online_names())
+    online_names = set(registry.online_names())
+    if uid not in ADMIN_IDS:
+        online_names &= set().union(*(group_computers(g) for g in user_groups(uid)))
+    online = sorted(online_names)
     if not online:
         await update.message.reply_text("No computers online right now.")
         return
@@ -423,7 +830,14 @@ async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     if user_id in ADMIN_IDS:
         await update.message.reply_text(
-            "Admin commands: /scripts, /online, /offline, /sessions, /users, /bind, /unbind, /send, /broadcast, /panel"
+            "Admin commands: /scripts, /online, /offline, /remove, /sessions, /users, /bind, /unbind, /send, /broadcast, /pair, /panel"
+        )
+        return
+
+    if user_groups(user_id):
+        await update.message.reply_text(
+            "Moderator commands: /groups, /scripts, /online, /offline, "
+            "/send <group> <computer> <command>, /broadcast <group> <command>."
         )
         return
 
@@ -449,86 +863,100 @@ async def tg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             await notify_admins(f"User {user_id} tried to use {bound_pc}, but it is offline.")
         return
 
-    pc_name = text
-    if pc_name not in registry.all_names():
-        await update.message.reply_text("Computer not found. Check the name and try again.")
-        return
-
-    existing_user = active_sessions.get(pc_name, {}).get("tg_user_id")
-    if existing_user and existing_user != user_id:
-        await update.message.reply_text("This computer is already linked to another Telegram user.")
-        return
-
-    user_bindings[user_id] = pc_name
-    active_sessions.setdefault(pc_name, {
-        "pc_name": pc_name,
-        "ws": registry.clients.get(pc_name),
-        "connected": registry.is_alive(registry.clients.get(pc_name)),
-        "last_seen": registry.last_seen.get(pc_name, "never"),
-    })
-    active_sessions[pc_name]["tg_user_id"] = user_id
-
-    await update.message.reply_text(f"Connected to {pc_name}.", reply_markup=USER_MENU)
-    await notify_admins(f"User {user_id} connected to {pc_name}.")
+    # FIX: free text is no longer accepted as "the computer name = bind to it".
+    # Anyone who can see /api/status (previously unauthenticated) or who
+    # overhears a computer's name could otherwise hijack it. Binding now
+    # requires a one-time code from /pair, sent via /claim.
+    await update.message.reply_text(
+        "Not connected. Ask the admin for a one-time pairing code and send it as: /claim <code>"
+    )
 
 
 async def tg_send(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
     args = " ".join(ctx.args)
     if not args:
-        await update.message.reply_text("Usage: /send <script> <command>")
+        await update.message.reply_text("Usage: /send <computer> <command> (admin) or /send <group> <computer> <command> (moderator)")
         return
-    parts = args.split(None, 1)
-    if len(parts) < 2:
-        await update.message.reply_text("Usage: /send <script> <command>")
-        return
-    name, cmd = parts[0], parts[1]
-    if name not in registry.clients and name not in registry.last_seen:
+    parts = args.split(None, 2)
+    if uid in ADMIN_IDS:
+        if len(parts) < 2:
+            await update.message.reply_text("Usage: /send <computer> <command>")
+            return
+        name, cmd = parts[0], " ".join(parts[1:])
+    else:
+        if len(parts) < 3:
+            await update.message.reply_text("Usage: /send <group> <computer> <command>")
+            return
+        group_name, name, cmd = parts
+        if not can_manage_group(uid, group_name) or name not in group_computers(group_name):
+            await update.message.reply_text("You do not have permission to control that computer in this group.")
+            return
+        # FIX: check every '/and' segment, not just the first.
+        if not _all_segments_allowed(cmd):
+            audit(f"tg:{uid}", "send", name, cmd, "denied: not in moderator allowlist")
+            await update.message.reply_text(
+                "Command is not in the moderator allowlist. Allowed: "
+                + ", ".join(sorted(MODERATOR_ALLOWED_COMMANDS))
+            )
+            return
+    if name not in registry.all_names():
         await update.message.reply_text(f"Computer '{name}' was not found.")
         return
     ok = await registry.try_send(name, {
-        "type": "command",
-        "command": cmd,
-        "reply_chat_id": update.effective_chat.id,
+        "type": "command", "command": cmd, "reply_chat_id": update.effective_chat.id,
     })
-    if ok:
-        await update.message.reply_text(f"Sent to {name}: {cmd}")
-    else:
-        await update.message.reply_text(
-            f"{name} is offline. Last seen: {registry.last_seen.get(name, 'never')}"
-        )
+    audit(f"tg:{uid}", "send", name, cmd, "sent" if ok else "offline")
+    await update.message.reply_text(f"Sent to {name}: {cmd}" if ok else f"{name} is offline. Last seen: {registry.last_seen.get(name, 'never')}")
 
 
 async def tg_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    args = " ".join(ctx.args).strip()
+    if not args:
+        await update.message.reply_text("Usage: /broadcast <command> (admin) or /broadcast <group> <command> (moderator)")
         return
-    cmd = " ".join(ctx.args)
-    if not cmd:
-        await update.message.reply_text("Usage: /broadcast <command>")
-        return
+    if uid in ADMIN_IDS:
+        cmd = args
+        targets = set(registry.online_names())
+    else:
+        parts = args.split(None, 1)
+        if len(parts) != 2:
+            await update.message.reply_text("Usage: /broadcast <group> <command>")
+            return
+        group_name, cmd = parts
+        if not can_manage_group(uid, group_name):
+            await update.message.reply_text("You do not have permission to manage that group.")
+            return
+        # FIX: check every '/and' segment, not just the first.
+        if not _all_segments_allowed(cmd):
+            audit(f"tg:{uid}", "broadcast", group_name, cmd, "denied: not in moderator allowlist")
+            await update.message.reply_text(
+                "Command is not in the moderator allowlist. Allowed: "
+                + ", ".join(sorted(MODERATOR_ALLOWED_COMMANDS))
+            )
+            return
+        targets = group_computers(group_name) & set(registry.online_names())
     sent = []
-    for name, ws in registry.clients.items():
-        if registry.is_alive(ws):
-            try:
-                await ws.send_json({
-                    "type": "command",
-                    "command": cmd,
-                    "reply_chat_id": update.effective_chat.id,
-                })
-                sent.append(name)
-            except Exception:
-                pass
-    await update.message.reply_text(f"Broadcast sent to: {', '.join(sent) or 'none'}")
-
+    for name in sorted(targets):
+        if await registry.try_send(name, {
+            "type": "command", "command": cmd, "reply_chat_id": update.effective_chat.id,
+        }):
+            sent.append(name)
+    audit(f"tg:{uid}", "broadcast", ",".join(sorted(sent)) or "-", cmd, f"count={len(sent)}")
+    await update.message.reply_text(f"Command sent to {len(sent)} computer(s): " + (", ".join(sent) if sent else "none online"))
 
 async def tg_scripts(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only")
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS and not user_groups(uid):
+        await update.message.reply_text("Admin or group moderator only")
         return
     names = registry.all_names()
+    if uid not in ADMIN_IDS:
+        names &= set().union(*(group_computers(g) for g in user_groups(uid)))
     if not names:
         await update.message.reply_text("No computers have connected yet.")
         return
@@ -554,24 +982,35 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only")
         return
-    await update.message.reply_text(f"Panel: {PUBLIC_URL}/admin?key={SECRET_KEY}")
+    await update.message.reply_text(
+        f"Panel: {PANEL_URL}\n"
+        "The panel will ask for the admin key (ADMIN_API_KEY) on first open. "
+        "Do not share the key or a link containing it."
+    )
 
 
 async def h_keepalive_ping(request: web.Request) -> web.Response:
     return web.Response(text="OK")
 
 
+def _check_admin(request: web.Request) -> bool:
+    key = request.headers.get("X-Admin-Key", "")
+    # FIX: no more silent fallback to SECRET_KEY — ADMIN_API_KEY is mandatory
+    # (enforced at startup in main()), so this is always a dedicated secret.
+    return bool(ADMIN_API_KEY) and key == ADMIN_API_KEY
+
+
 async def h_status(request: web.Request) -> web.Response:
+    # FIX: this endpoint used to be public and leaked every computer's name,
+    # which was the first step of the self-bind hijack. Now admin-only.
+    if not _check_admin(request):
+        return web.json_response({"error": "Unauthorized"}, status=401)
     online = registry.online_names()
     return web.json_response({
         "status": "ok",
         "online": online,
         "offline": [n for n in registry.all_names() if n not in online],
     })
-
-
-def _check_admin(request: web.Request) -> bool:
-    return request.headers.get("X-Admin-Key", "") == SECRET_KEY
 
 
 async def h_scripts(request: web.Request) -> web.Response:
@@ -612,6 +1051,7 @@ async def h_bind(request: web.Request) -> web.Response:
     except Exception:
         return web.json_response({"error": "Bad request — need user_id (int) and pc_name"}, status=400)
     ok, msg = do_bind(uid, pc_name)
+    audit("api", "bind", pc_name, f"user_id={uid}", msg)
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
 
@@ -626,6 +1066,7 @@ async def h_unbind(request: web.Request) -> web.Response:
     if not target:
         return web.json_response({"error": "target required"}, status=400)
     ok, msg = do_unbind(target)
+    audit("api", "unbind", target, result=msg)
     return web.json_response({"ok": ok, "message": msg}, status=200 if ok else 400)
 
 
@@ -645,6 +1086,7 @@ async def h_send(request: web.Request) -> web.Response:
         "command": cmd,
         "reply_chat_id": data.get("reply_chat_id"),
     })
+    audit("api", "send", name, cmd, "sent" if ok else "not connected")
     return web.json_response({"status": "sent"} if ok else {"error": "not connected"}, status=200 if ok else 503)
 
 
@@ -666,6 +1108,7 @@ async def h_broadcast(request: web.Request) -> web.Response:
                 sent.append(name)
             except Exception:
                 pass
+    audit("api", "broadcast", ",".join(sorted(sent)) or "-", cmd, f"count={len(sent)}")
     return web.json_response({"sent_to": sent, "count": len(sent)})
 
 
@@ -723,7 +1166,8 @@ ADMIN_HTML = """<!doctype html>
 <pre id="log">ready</pre>
 
 <script>
-const KEY = new URLSearchParams(location.search).get("key") || "";
+const KEY = new URLSearchParams(location.search).get("key") || sessionStorage.getItem("admin_key") || prompt("Enter admin key:") || "";
+if (KEY) sessionStorage.setItem("admin_key", KEY);
 const H = {"X-Admin-Key": KEY, "Content-Type": "application/json"};
 
 async function refresh() {
@@ -776,8 +1220,20 @@ async def h_admin(request: web.Request) -> web.Response:
 
 
 async def main() -> None:
+    load_group_state()
     if not SECRET_KEY:
         log.error("FATAL: SECRET_KEY env var is empty — refusing to start (would accept any client).")
+        raise SystemExit(1)
+    # FIX: ADMIN_API_KEY is now mandatory and fails closed instead of
+    # silently falling back to SECRET_KEY (which every client also holds).
+    if not ADMIN_API_KEY:
+        log.error(
+            "FATAL: ADMIN_API_KEY env var is empty — refusing to start. "
+            "Set a separate ADMIN_API_KEY (must differ from SECRET_KEY) in the hosting environment."
+        )
+        raise SystemExit(1)
+    if ADMIN_API_KEY == SECRET_KEY:
+        log.error("FATAL: ADMIN_API_KEY must not equal SECRET_KEY — use a separate value for the admin API.")
         raise SystemExit(1)
 
     global tg_app
@@ -786,10 +1242,14 @@ async def main() -> None:
         for cmd, handler in [
             ("start", tg_start_v2), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
-            ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
+            ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
+            ("group", tg_group), ("groups", tg_groups), ("moderator", tg_moderator), ("claim", tg_claim),
+            ("renamegroup", tg_renamegroup), ("moderators", tg_moderators), ("modremove", tg_modremove),
+            ("pair", tg_pair),
         ]:
             tg_app.add_handler(CommandHandler(cmd, handler))
+        tg_app.add_handler(MessageHandler(filters.COMMAND, tg_group_command))
         tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, tg_text))
         await tg_app.initialize()
         await tg_app.start()
