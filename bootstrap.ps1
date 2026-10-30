@@ -142,7 +142,13 @@ try {
     }
     $SwapDone = $true  # from here on, a failure must trigger rollback
 
-    Rename-Item -Path $StageDir -NewName (Split-Path $InstDir -Leaf) -ErrorAction Stop
+    # FIX: Rename-Item only renames within the SAME parent directory — it
+    # cannot move $StageDir (under %TEMP%) to $InstDir (under %USERPROFILE%).
+    # That bug left the new files stranded in %TEMP% while the script went on
+    # to write config.json into the now-missing $InstDir, which is exactly
+    # what caused "Could not find a part of the path ...\config.json".
+    # Move-Item is the correct cmdlet for moving across directories.
+    Move-Item -Path $StageDir -Destination $InstDir -ErrorAction Stop
 
     # Carry the old config.json forward so the install keeps working with the
     # same secret_key / server_url instead of silently reverting to a template.
@@ -245,7 +251,10 @@ Write-Host "Backups (if any) remain at $env:LOCALAPPDATA\PCRC_Backups — delete
     if (Test-Path $RenamedOldDir) {
         if (-not (Test-Path $BackupRoot)) { New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null }
         $FinalOldBackup = Join-Path $BackupRoot "preswap_$Timestamp"
-        Rename-Item -Path $RenamedOldDir -NewName (Split-Path $FinalOldBackup -Leaf) -ErrorAction SilentlyContinue
+        # FIX: same Rename-Item-across-directories bug as above — $RenamedOldDir
+        # lives under %USERPROFILE% and $BackupRoot under %LOCALAPPDATA%, so this
+        # must be a move, not a rename.
+        Move-Item -Path $RenamedOldDir -Destination $FinalOldBackup -ErrorAction SilentlyContinue
     }
 
 } catch {
