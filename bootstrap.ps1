@@ -152,19 +152,25 @@ try {
 
     # Carry the old config.json forward so the install keeps working with the
     # same secret_key / server_url instead of silently reverting to a template.
+    # FIX: Set-Content -Encoding UTF8 on Windows PowerShell writes a UTF-8 BOM,
+    # which makes Python's json.loads() throw (silently swallowed by the
+    # client's except/pass), so it never actually reads name/secret_key back.
+    # [System.IO.File]::WriteAllText with UTF8Encoding($false) writes no BOM.
+    $NoBomUtf8 = New-Object System.Text.UTF8Encoding($false)
     if ($OldConfig) {
-        Set-Content -Path (Join-Path $InstDir "config.json") -Value $OldConfig -Encoding UTF8 -NoNewline
+        [System.IO.File]::WriteAllText((Join-Path $InstDir "config.json"), $OldConfig, $NoBomUtf8)
     } elseif (-not (Test-Path (Join-Path $InstDir "config.json"))) {
         $ConfigEx = Join-Path $InstDir "config.example.json"
         if (Test-Path $ConfigEx) {
             Copy-Item $ConfigEx (Join-Path $InstDir "config.json")
         } else {
-            @{
+            $defaultJson = @{
                 name       = "MyPC"
                 secret_key = "измени_пароль"
                 server_url = "wss://your-server.onrender.com"
                 update_url = ""
-            } | ConvertTo-Json | Set-Content (Join-Path $InstDir "config.json") -Encoding UTF8
+            } | ConvertTo-Json
+            [System.IO.File]::WriteAllText((Join-Path $InstDir "config.json"), $defaultJson, $NoBomUtf8)
         }
     }
     Write-Ok "Установлено в $InstDir"
