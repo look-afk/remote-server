@@ -1,0 +1,182 @@
+# PCRC Installer — всё по-настоящему "скачал и заработало"
+# Качает ГОТОВЫЙ exe (не исходники), спрашивает имя и ключ прямо в терминале,
+# сам пишет config.json и сам добавляет себя в автозагрузку.
+#
+# Запуск:
+#   irm https://raw.githubusercontent.com/look-afk/remote-server/main/install.ps1 | iex
+
+$ErrorActionPreference = "Stop"
+$ZipUrl     = "https://github.com/look-afk/pcrc-versions/releases/latest/download/RemoteControl-release.zip"
+$InstDir    = "$env:USERPROFILE\PCRC"
+$BackupRoot = "$env:LOCALAPPDATA\PCRC_Backups"
+$Timestamp  = Get-Date -Format "yyyyMMdd_HHmmss"
+
+function Write-Step($n, $msg) { Write-Host ""; Write-Host "  [$n] $msg" -ForegroundColor Cyan }
+function Write-Ok($msg)   { Write-Host "      OK  $msg" -ForegroundColor Green }
+function Write-Warn($msg) { Write-Host "      >>  $msg" -ForegroundColor Yellow }
+function Write-Err($msg)  { Write-Host "      !!  $msg" -ForegroundColor Red }
+
+Write-Host ""
+Write-Host "  ================================" -ForegroundColor Blue
+Write-Host "   PCRC Installer" -ForegroundColor White
+Write-Host "  ================================" -ForegroundColor Blue
+
+$StageDir      = "$env:TEMP\pcrc_stage_$Timestamp"
+$RenamedOldDir = "$InstDir`_old_$Timestamp"
+$SwapDone      = $false
+$PreviousBackupDir = $null
+
+function Restore-OnFailure {
+    if ($SwapDone -and (Test-Path $RenamedOldDir)) {
+        Write-Err "Install failed after the swap — rolling back to the previous version."
+        try {
+            if (Test-Path $InstDir) { Remove-Item $InstDir -Recurse -Force -ErrorAction SilentlyContinue }
+            Rename-Item -Path $RenamedOldDir -NewName (Split-Path $InstDir -Leaf) -ErrorAction Stop
+            Write-Ok "Rolled back. Your previous install at $InstDir is untouched."
+        } catch {
+            Write-Err "Automatic rollback failed. Your previous install is safe at: $RenamedOldDir"
+        }
+    } elseif (Test-Path $RenamedOldDir) {
+        Write-Err "Install failed before completing. Your previous install is untouched at $InstDir"
+    } else {
+        Write-Err "Install failed. No existing install was found, so nothing needed rolling back."
+    }
+    if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+try {
+    # ── 1. Скачиваем готовый релиз (exe + GUI + plugins), без Python ──────────
+    Write-Step "1/5" "Скачиваем готовую сборку с GitHub..."
+    $TmpZip = "$env:TEMP\pcrc_release_$Timestamp.zip"
+    Invoke-WebRequest -Uri $ZipUrl -OutFile $TmpZip -UseBasicParsing
+    if (-not (Test-Path $TmpZip) -or (Get-Item $TmpZip).Length -lt 1024) {
+        throw "Downloaded archive looks empty or too small — aborting before touching any existing install."
+    }
+    Write-Ok "Скачано ($((Get-Item $TmpZip).Length) bytes)"
+
+    # ── 2. Распаковываем в staging-папку (ещё не трогаем InstDir) ─────────────
+    Write-Step "2/5" "Распаковываем во временную папку..."
+    New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
+    Expand-Archive -Path $TmpZip -DestinationPath $StageDir -Force
+    if (-not (Get-ChildItem $StageDir -Filter "RemoteControl.exe" -Recurse)) {
+        throw "RemoteControl.exe not found in the downloaded archive."
+    }
+    Write-Ok "Распаковано"
+
+    # ── 3. Бэкап текущей установки, если есть + перенос старого config.json ──
+    Write-Step "3/5" "Проверяем предыдущую установку..."
+    $OldConfigPath = $null
+    if (Test-Path $InstDir) {
+        New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
+        $PreviousBackupDir = Join-Path $BackupRoot "backup_$Timestamp"
+        New-Item -ItemType Directory -Path $PreviousBackupDir -Force | Out-Null
+        Copy-Item "$InstDir\*" $PreviousBackupDir -Recurse -Force -ErrorAction Stop
+        Write-Ok "Резервная копия: $PreviousBackupDir"
+
+        $ExistingConfig = Join-Path $InstDir "config.json"
+        if (Test-Path $ExistingConfig) {
+            try {
+                $parsed = Get-Content $ExistingConfig -Raw | ConvertFrom-Json
+                if ($parsed.name -and $parsed.secret_key) {
+                    $OldConfigPath = $ExistingConfig
+                    Write-Ok "Найден рабочий config.json — переносим без повторных вопросов"
+                }
+            } catch {}
+        }
+
+        Get-ChildItem $BackupRoot -Directory | Sort-Object LastWriteTime -Descending |
+            Select-Object -Skip 5 | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Rename-Item -Path $InstDir -NewName (Split-Path $RenamedOldDir -Leaf) -ErrorAction Stop
+    } else {
+        Write-Ok "Предыдущей установки не найдено — это первая установка."
+    }
+    $SwapDone = $true
+
+    Move-Item -Path $StageDir -Destination $InstDir -ErrorAction Stop
+    Write-Ok "Установлено в $InstDir"
+
+    # ── 4. Имя и ключ — ПРЯМО В ТЕРМИНАЛЕ, без отдельного запуска exe ─────────
+    Write-Step "4/5" "Настройка"
+
+    if ($OldConfigPath) {
+        Copy-Item $OldConfigPath (Join-Path $InstDir "config.json") -Force
+        $cfg = Get-Content (Join-Path $InstDir "config.json") -Raw | ConvertFrom-Json
+        Write-Ok "Используем сохранённые имя и ключ: $($cfg.name)"
+    } else {
+        Write-Host ""
+        $pcName = Read-Host "      Имя этого ПК (например home_pc)"
+        while (-not $pcName.Trim()) {
+            Write-Warn "Имя не может быть пустым"
+            $pcName = Read-Host "      Имя этого ПК"
+        }
+
+        $secretSecure = Read-Host "      Secret key (узнать у того, кто поднимал сервер)" -AsSecureString
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secretSecure)
+        $secretPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        while (-not $secretPlain.Trim()) {
+            Write-Warn "Ключ не может быть пустым"
+            $secretSecure = Read-Host "      Secret key" -AsSecureString
+            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secretSecure)
+            $secretPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+
+        $configObj = [ordered]@{
+            name       = $pcName.Trim()
+            server_url = "https://remote-server-mr8v.onrender.com"
+            secret_key = $secretPlain.Trim()
+            update_url = "https://raw.githubusercontent.com/look-afk/pcrc-versions/main"
+            voice      = @{
+                enabled = $true; language = "en-US"; mic_index = $null
+                timeout = 8; phrase_time_limit = 12; ambient_duration = 1.0
+                energy_threshold = $null; pause_threshold = 0.8
+                dynamic_energy = $true; tts_rate = 165; tts_voice_id = $null
+            }
+        }
+        $configObj | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $InstDir "config.json") -Encoding UTF8
+        Write-Ok "config.json создан"
+    }
+
+    # ── 5. Автозагрузка — делаем сами, не дожидаясь первого запуска exe ───────
+    Write-Step "5/5" "Добавляем в автозагрузку..."
+    $exe     = Join-Path $InstDir "RemoteControl.exe"
+    $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\RemoteControl.lnk"
+    try {
+        $ws = New-Object -ComObject WScript.Shell
+        $sc = $ws.CreateShortcut($startup)
+        $sc.TargetPath       = $exe
+        $sc.WorkingDirectory = $InstDir
+        $sc.WindowStyle      = 7
+        $sc.Save()
+        Write-Ok "Добавлено в автозагрузку: $startup"
+    } catch {
+        Write-Warn "Не удалось добавить в автозагрузку: $($_.Exception.Message)"
+        Write-Warn "Можно добавить вручную позже командой внутри приложения: add_startup"
+    }
+
+    Remove-Item $TmpZip -Force -ErrorAction SilentlyContinue
+
+    Write-Host ""
+    Write-Host "  ================================" -ForegroundColor Green
+    Write-Host "   Готово! Запускаю..." -ForegroundColor White
+    Write-Host "  ================================" -ForegroundColor Green
+    Write-Host "  Папка: $InstDir" -ForegroundColor White
+    Write-Host ""
+
+    Start-Process -FilePath $exe -WorkingDirectory $InstDir
+
+    if (Test-Path $RenamedOldDir) {
+        if (-not (Test-Path $BackupRoot)) { New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null }
+        $FinalOldBackup = Join-Path $BackupRoot "preswap_$Timestamp"
+        Move-Item -Path $RenamedOldDir -Destination $FinalOldBackup -ErrorAction SilentlyContinue
+    }
+
+} catch {
+    Write-Err "Ошибка установки: $($_.Exception.Message)"
+    Restore-OnFailure
+    Write-Host ""
+    Write-Host "  Установка не завершена. Ничего не сломано — смотри сообщения выше." -ForegroundColor Yellow
+    exit 1
+}
