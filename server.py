@@ -233,16 +233,24 @@ def plugin_commands_for(pc_name: str) -> set[str]:
     }
 
 
+PLUGIN_CATALOG_URL = "https://look-afk.github.io/pcrc-plugins/"
+
+
 def format_plugins(pc_name: str) -> str:
     plugins = client_plugins.get(pc_name, [])
     if not plugins:
-        return f"No plugin information received from {pc_name} yet. Make sure the client is online and has loaded its plugins."
-    lines = [f"Plugins on {pc_name}:"]
-    for plugin in plugins:
-        commands = ", ".join(plugin.get("commands", [])) or "no commands"
-        description = f" — {plugin['description']}" if plugin.get("description") else ""
-        lines.append(f"• {plugin['name']} v{plugin['version']}{description}\n  Commands: {commands}")
-    lines.append("\nSend a command name with its arguments to run it on your bound computer.")
+        lines = [
+            f"No plugin information received from {pc_name} yet.",
+            "Make sure the client is online and has loaded its plugins.",
+        ]
+    else:
+        lines = [f"Plugins on {pc_name}:"]
+        for plugin in plugins:
+            commands = ", ".join(plugin.get("commands", [])) or "no commands"
+            description = f" — {plugin['description']}" if plugin.get("description") else ""
+            lines.append(f"• {plugin['name']} v{plugin['version']}{description}\n  Commands: {commands}")
+        lines.append("\nSend a command name with its arguments to run it on your bound computer.")
+    lines.append(f"\nMore plugins and installation: {PLUGIN_CATALOG_URL}")
     return "\n".join(lines)[:3900]
 
 # pc_name -> session metadata. The WebSocket itself is still owned by ClientRegistry.
