@@ -1087,6 +1087,17 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "Do not share the key or a link containing it."
     )
 
+async def tg_guide(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send the URL of the current HTML admin panel to the main admin."""
+    if not update.effective_user or update.effective_user.id not in ADMIN_IDS:
+        await update.effective_message.reply_text("Admin only")
+        return
+    await update.effective_message.reply_text(
+        f"HTML guide / admin panel: {PANEL_URL}\n"
+        "The page is served from admin_panel.html. "
+        "Enter the separate ADMIN_API_KEY when prompted; do not share it."
+    )
+
 
 async def h_keepalive_ping(request: web.Request) -> web.Response:
     return web.Response(text="OK")
@@ -1428,7 +1439,15 @@ async def h_download(request: web.Request) -> web.Response:
 
 
 async def h_admin(request: web.Request) -> web.Response:
-    return web.Response(text=ADMIN_HTML, content_type="text/html")
+    # Serve the standalone HTML so the deployed panel stays in sync with the
+    # latest admin_panel.html in the repository. Keep the embedded version as
+    # a compatibility fallback if the file is missing from an older deploy.
+    html_path = Path(__file__).resolve().with_name("admin_panel.html")
+    try:
+        html = html_path.read_text(encoding="utf-8")
+    except OSError:
+        html = ADMIN_HTML
+    return web.Response(text=html, content_type="text/html")
 
 
 async def main() -> None:
@@ -1455,7 +1474,7 @@ async def main() -> None:
             ("start", tg_start_v2), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
-            ("unbind", tg_unbind), ("panel", tg_panel),
+            ("unbind", tg_unbind), ("panel", tg_panel), ("guide", tg_guide),
             ("group", tg_group), ("groups", tg_groups), ("moderator", tg_moderator), ("claim", tg_claim),
             ("renamegroup", tg_renamegroup), ("moderators", tg_moderators), ("modremove", tg_modremove),
             ("pair", tg_pair),
