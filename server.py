@@ -30,7 +30,7 @@ PORT = int(os.getenv("PORT", 8080))
 UPDATE_VERSION = int(os.getenv("UPDATE_VERSION", "1"))
 UPDATE_EXE_URL = os.getenv("UPDATE_EXE_URL", "")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")  # REQUIRED, separate from SECRET_KEY — no fallback
-PANEL_URL = PUBLIC_URL.rstrip("/") + "/admin"
+PANEL_URL = "https://remote-server-mr8v.onrender.com/admin"
 GROUPS_FILE = Path(os.getenv("GROUPS_FILE", "remote_groups.json"))
 AUDIT_FILE = Path(os.getenv("AUDIT_FILE", "audit.log"))
 
