@@ -39,6 +39,34 @@
 <div class="cmd"><code>open_app path</code><span>Открыть приложение.</span></div><div class="cmd"><code>open_url url</code><span>Открыть URL.</span></div><div class="cmd"><code>close_app name</code><span>Закрыть приложение.</span></div><div class="cmd"><code>list_windows</code><span>Список окон.</span></div><div class="cmd"><code>notify message</code><span>Показать уведомление.</span></div><div class="cmd"><code>msgbox text</code><span>Показать диалоговое окно.</span></div><div class="cmd"><code>speak text</code><span>Озвучить текст.</span></div><div class="cmd"><code>play_sound</code><span>Воспроизвести звук.</span></div><div class="cmd"><code>volume n</code><span>Установить громкость.</span></div></section>
 <section class="card"><h2>Питание и запуск команд</h2>
 <div class="cmd"><code>shutdown [seconds]</code><span>Запланировать выключение.</span></div><div class="cmd"><code>restart [seconds]</code><span>Перезагрузить компьютер.</span></div><div class="cmd"><code>cancel_shutdown</code><span>Отменить запланированное выключение.</span></div><div class="cmd"><code>sleep</code><span>Перевести компьютер в сон.</span></div><div class="cmd"><code>lock</code><span>Заблокировать экран.</span></div><div class="cmd"><code>shell command</code><span>Выполнить команду оболочки.</span></div><div class="cmd"><code>powershell command</code><span>Выполнить команду PowerShell.</span></div><div class="cmd"><code>run_script path</code><span>Запустить скрипт.</span></div><div class="cmd"><code>help</code><span>Показать доступные команды клиента.</span></div></section>
+<section class="card"><h2>Дополнительные команды клиента</h2>
+<div class="cmd"><code>show_desktop</code><span>Показать рабочий стол.</span></div>
+<div class="cmd"><code>task_manager</code><span>Открыть диспетчер задач.</span></div>
+<div class="cmd"><code>close_all_apps</code><span>Закрыть открытые приложения; используйте осторожно.</span></div>
+<div class="cmd"><code>schedule_task</code><span>Управление запланированной задачей.</span></div>
+<div class="cmd"><code>disable_input [seconds]</code><span>Временно блокировать ввод. Используйте только на своём устройстве и с коротким тайм-аутом.</span></div>
+<div class="cmd"><code>set_wallpaper path</code><span>Установить обои.</span></div>
+<div class="cmd"><code>set_resolution width height</code><span>Изменить разрешение экрана.</span></div>
+<div class="cmd"><code>registry_read path</code><span>Прочитать значение реестра Windows.</span></div>
+<div class="cmd"><code>get_windows_key</code><span>Клиентская команда, связанная с Windows key/activation state; запускайте только с разрешения владельца.</span></div>
+<div class="cmd"><code>empty_recycle</code><span>Очистить корзину.</span></div>
+<div class="cmd"><code>add_startup</code><span>Добавить приложение в автозагрузку.</span></div>
+<div class="cmd"><code>remove_startup</code><span>Удалить приложение из автозагрузки.</span></div>
+<div class="cmd"><code>prank_update</code><span>Команда демонстрационного/пранк-сценария; используйте только на собственном устройстве с явным согласием.</span></div>
+<div class="cmd"><code>show_config</code><span>Показать сведения о конфигурации клиента; не публикуйте секреты.</span></div>
+<div class="cmd"><code>update_server</code><span>Изменить адрес сервера клиента.</span></div>
+<div class="cmd"><code>update_name</code><span>Изменить имя клиента.</span></div>
+<div class="cmd"><code>update_secret</code><span>Обновить секретный ключ клиента.</span></div>
+<div class="cmd"><code>version</code><span>Показать версию клиента.</span></div>
+<div class="cmd"><code>voice_mics</code><span>Список доступных микрофонов.</span></div>
+<div class="cmd"><code>voice_test</code><span>Проверить голосовую подсистему.</span></div>
+<div class="cmd"><code>check_update</code><span>Проверить наличие обновления.</span></div>
+<div class="cmd"><code>restart_update</code><span>Перезапустить клиент для применения обновления.</span></div>
+<div class="cmd"><code>uninstall</code><span>Удалить клиент; сначала убедитесь, что это нужный компьютер.</span></div>
+<div class="cmd"><code>hello</code><span>Тестовая команда.</span></div>
+<div class="cmd"><code>my_task</code><span>Показать доступные сведения о текущей задаче.</span></div>
+<div class="cmd"><code>dir</code><span>Алиас команды ls.</span></div><div class="cmd"><code>sd</code><span>Алиас команды ls.</span></div>
+</section>
 <section class="card"><h2>Команды и плагины</h2>
 <div class="cmd"><code>accept [file]</code><span>Поддерживается не во всех версиях клиента.</span></div><div class="cmd"><code>plugin commands</code><span>Команды зависят от установленных плагинов; список запрашивается через Plugins в Telegram.</span></div><div class="cmd"><code> /and </code><span>Цепочка команд: пример <code>screenshot /and notify Done</code>. Выполняйте только понятные и разрешённые действия.</span></div></section>
 </div>
@@ -55,7 +83,7 @@
 <div class="cmd"><code>/group, /groups, /renamegroup</code><span>Управление группами компьютеров.</span></div>
 <div class="cmd"><code>/moderator, /moderators, /modremove</code><span>Управление модераторами.</span></div>
 <div class="cmd"><code>/remove &lt;computer&gt;</code><span>Удалить из списка только отключённый компьютер.</span></div>
-<div class="note">Примечание: команды клиента определяются установленной версией и плагинами. На данный момент в клиентском реестре обнаружено 67 core command names/aliases; список выше отражает поддерживаемые имена, а некоторые команды могут иметь дополнительные аргументы.</div>
+<div class="note">Примечание: команды клиента определяются установленной версией и плагинами. На данный момент в клиентском реестре обнаружено 92 core command names/aliases; список выше отражает поддерживаемые имена, а некоторые команды могут иметь дополнительные аргументы.</div>
 </section>
 <footer class="foot">PCRC · Command reference · <a href="https://github.com/look-afk/pcrc-client">Client repository</a></footer>
 </main>
