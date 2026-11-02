@@ -1,189 +1,66 @@
-# PCRC Installer — всё по-настоящему "скачал и заработало"
-# Качает ГОТОВЫЙ exe (не исходники), спрашивает имя и ключ прямо в терминале,
-# сам пишет config.json и сам добавляет себя в автозагрузку.
-#
-# Запуск:
-#   irm https://raw.githubusercontent.com/look-afk/remote-server/main/install.ps1 | iex
-
-$ErrorActionPreference = "Stop"
-$ZipUrl     = "https://github.com/look-afk/pcrc-versions/releases/latest/download/RemoteControl-release.zip"
-$InstDir    = "$env:USERPROFILE\PCRC"
-$BackupRoot = "$env:LOCALAPPDATA\PCRC_Backups"
-$Timestamp  = Get-Date -Format "yyyyMMdd_HHmmss"
-
-function Write-Step($n, $msg) { Write-Host ""; Write-Host "  [$n] $msg" -ForegroundColor Cyan }
-function Write-Ok($msg)   { Write-Host "      OK  $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "      >>  $msg" -ForegroundColor Yellow }
-function Write-Err($msg)  { Write-Host "      !!  $msg" -ForegroundColor Red }
-
-Write-Host ""
-Write-Host "  ================================" -ForegroundColor Blue
-Write-Host "   PCRC Installer" -ForegroundColor White
-Write-Host "  ================================" -ForegroundColor Blue
-
-$StageDir      = "$env:TEMP\pcrc_stage_$Timestamp"
-$RenamedOldDir = "$InstDir`_old_$Timestamp"
-$SwapDone      = $false
-$PreviousBackupDir = $null
-
-function Restore-OnFailure {
-    if ($SwapDone -and (Test-Path $RenamedOldDir)) {
-        Write-Err "Install failed after the swap — rolling back to the previous version."
-        try {
-            if (Test-Path $InstDir) { Remove-Item $InstDir -Recurse -Force -ErrorAction SilentlyContinue }
-            Rename-Item -Path $RenamedOldDir -NewName (Split-Path $InstDir -Leaf) -ErrorAction Stop
-            Write-Ok "Rolled back. Your previous install at $InstDir is untouched."
-        } catch {
-            Write-Err "Automatic rollback failed. Your previous install is safe at: $RenamedOldDir"
-        }
-    } elseif (Test-Path $RenamedOldDir) {
-        Write-Err "Install failed before completing. Your previous install is untouched at $InstDir"
-    } else {
-        Write-Err "Install failed. No existing install was found, so nothing needed rolling back."
-    }
-    if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force -ErrorAction SilentlyContinue }
-}
-
-try {
-    # ── 1. Скачиваем готовый релиз (exe + GUI + plugins), без Python ──────────
-    Write-Step "1/5" "Скачиваем готовую сборку с GitHub..."
-    $TmpZip = "$env:TEMP\pcrc_release_$Timestamp.zip"
-    Invoke-WebRequest -Uri $ZipUrl -OutFile $TmpZip -UseBasicParsing
-    if (-not (Test-Path $TmpZip) -or (Get-Item $TmpZip).Length -lt 1024) {
-        throw "Downloaded archive looks empty or too small — aborting before touching any existing install."
-    }
-    Write-Ok "Скачано ($((Get-Item $TmpZip).Length) bytes)"
-
-    # ── 2. Распаковываем в staging-папку (ещё не трогаем InstDir) ─────────────
-    Write-Step "2/5" "Распаковываем во временную папку..."
-    New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
-    Expand-Archive -Path $TmpZip -DestinationPath $StageDir -Force
-    if (-not (Get-ChildItem $StageDir -Filter "RemoteControl.exe" -Recurse)) {
-        throw "RemoteControl.exe not found in the downloaded archive."
-    }
-    Write-Ok "Распаковано"
-
-    # ── 3. Бэкап текущей установки, если есть + перенос старого config.json ──
-    Write-Step "3/5" "Проверяем предыдущую установку..."
-    $OldConfigPath = $null
-    if (Test-Path $InstDir) {
-        New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
-        $PreviousBackupDir = Join-Path $BackupRoot "backup_$Timestamp"
-        New-Item -ItemType Directory -Path $PreviousBackupDir -Force | Out-Null
-        Copy-Item "$InstDir\*" $PreviousBackupDir -Recurse -Force -ErrorAction Stop
-        Write-Ok "Резервная копия: $PreviousBackupDir"
-
-        $ExistingConfig = Join-Path $InstDir "config.json"
-        if (Test-Path $ExistingConfig) {
-            try {
-                $parsed = Get-Content $ExistingConfig -Raw | ConvertFrom-Json
-                if ($parsed.name -and $parsed.secret_key) {
-                    $OldConfigPath = $ExistingConfig
-                    Write-Ok "Найден рабочий config.json — переносим без повторных вопросов"
-                }
-            } catch {}
-        }
-
-        Get-ChildItem $BackupRoot -Directory | Sort-Object LastWriteTime -Descending |
-            Select-Object -Skip 5 | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-
-        Rename-Item -Path $InstDir -NewName (Split-Path $RenamedOldDir -Leaf) -ErrorAction Stop
-    } else {
-        Write-Ok "Предыдущей установки не найдено — это первая установка."
-    }
-    $SwapDone = $true
-
-    Move-Item -Path $StageDir -Destination $InstDir -ErrorAction Stop
-    Write-Ok "Установлено в $InstDir"
-
-    # ── 4. Имя и ключ — ПРЯМО В ТЕРМИНАЛЕ, без отдельного запуска exe ─────────
-    Write-Step "4/5" "Настройка"
-
-    if ($OldConfigPath) {
-        Copy-Item $OldConfigPath (Join-Path $InstDir "config.json") -Force
-        $cfg = Get-Content (Join-Path $InstDir "config.json") -Raw | ConvertFrom-Json
-        Write-Ok "Используем сохранённые имя и ключ: $($cfg.name)"
-    } else {
-        Write-Host ""
-        $pcName = Read-Host "      Имя этого ПК (например home_pc)"
-        while (-not $pcName.Trim()) {
-            Write-Warn "Имя не может быть пустым"
-            $pcName = Read-Host "      Имя этого ПК"
-        }
-
-        $secretSecure = Read-Host "      Secret key (узнать у того, кто поднимал сервер)" -AsSecureString
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secretSecure)
-        $secretPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        while (-not $secretPlain.Trim()) {
-            Write-Warn "Ключ не может быть пустым"
-            $secretSecure = Read-Host "      Secret key" -AsSecureString
-            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secretSecure)
-            $secretPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        }
-
-        $configObj = [ordered]@{
-            name       = $pcName.Trim()
-            server_url = "https://remote-server-mr8v.onrender.com"
-            secret_key = $secretPlain.Trim()
-            update_url = "https://raw.githubusercontent.com/look-afk/pcrc-versions/main"
-            voice      = @{
-                enabled = $true; language = "en-US"; mic_index = $null
-                timeout = 8; phrase_time_limit = 12; ambient_duration = 1.0
-                energy_threshold = $null; pause_threshold = 0.8
-                dynamic_energy = $true; tts_rate = 165; tts_voice_id = $null
-            }
-        }
-        # FIX: Set-Content -Encoding UTF8 on Windows PowerShell writes a UTF-8
-        # BOM at the start of the file. Python's json.loads() chokes on that
-        # BOM and throws, which client_final.py's load_config() silently
-        # swallowed — so the exe never saw the name/secret_key we just wrote
-        # and popped its own "First Setup" dialog right after this script
-        # finished. Writing without a BOM fixes it.
-        $jsonText = $configObj | ConvertTo-Json -Depth 5
-        [System.IO.File]::WriteAllText((Join-Path $InstDir "config.json"), $jsonText, (New-Object System.Text.UTF8Encoding($false)))
-        Write-Ok "config.json создан"
-    }
-
-    # ── 5. Автозагрузка — делаем сами, не дожидаясь первого запуска exe ───────
-    Write-Step "5/5" "Добавляем в автозагрузку..."
-    $exe     = Join-Path $InstDir "RemoteControl.exe"
-    $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\RemoteControl.lnk"
-    try {
-        $ws = New-Object -ComObject WScript.Shell
-        $sc = $ws.CreateShortcut($startup)
-        $sc.TargetPath       = $exe
-        $sc.WorkingDirectory = $InstDir
-        $sc.WindowStyle      = 7
-        $sc.Save()
-        Write-Ok "Добавлено в автозагрузку: $startup"
-    } catch {
-        Write-Warn "Не удалось добавить в автозагрузку: $($_.Exception.Message)"
-        Write-Warn "Можно добавить вручную позже командой внутри приложения: add_startup"
-    }
-
-    Remove-Item $TmpZip -Force -ErrorAction SilentlyContinue
-
-    Write-Host ""
-    Write-Host "  ================================" -ForegroundColor Green
-    Write-Host "   Готово! Запускаю..." -ForegroundColor White
-    Write-Host "  ================================" -ForegroundColor Green
-    Write-Host "  Папка: $InstDir" -ForegroundColor White
-    Write-Host ""
-
-    Start-Process -FilePath $exe -WorkingDirectory $InstDir
-
-    if (Test-Path $RenamedOldDir) {
-        if (-not (Test-Path $BackupRoot)) { New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null }
-        $FinalOldBackup = Join-Path $BackupRoot "preswap_$Timestamp"
-        Move-Item -Path $RenamedOldDir -Destination $FinalOldBackup -ErrorAction SilentlyContinue
-    }
-
-} catch {
-    Write-Err "Ошибка установки: $($_.Exception.Message)"
-    Restore-OnFailure
-    Write-Host ""
-    Write-Host "  Установка не завершена. Ничего не сломано — смотри сообщения выше." -ForegroundColor Yellow
-    exit 1
-}
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>PCRC — Command Guide</title>
+<style>
+:root{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--purple:#a78bfa;--purple2:#c4b5fd}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#21183b 0,transparent 45%),var(--bg);color:var(--text);font:15px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1100px;margin:auto;padding:36px 20px 70px}.top{display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap}.brand{font-weight:800;letter-spacing:.12em;color:var(--purple2)}h1{font-size:clamp(30px,5vw,48px);line-height:1.1;margin:32px 0 12px}p{color:var(--muted)}.lead{max-width:720px;font-size:17px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0 30px}.btn{display:inline-block;padding:10px 15px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);background:var(--panel)}.btn.primary{background:var(--purple);border-color:var(--purple);color:#170f25;font-weight:700}.search{width:100%;padding:13px 15px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;margin:8px 0 22px;outline:none}.search:focus{border-color:var(--purple)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:14px}.card{background:rgba(22,27,34,.92);border:1px solid var(--line);border-radius:14px;padding:18px}.card h2{font-size:17px;margin:0 0 12px}.cmd{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid #252b33}.cmd:first-of-type{border-top:0}.cmd code{color:var(--purple2);white-space:nowrap;overflow-wrap:anywhere}.cmd span{color:var(--muted);font-size:13px}.note{margin-top:22px;border:1px solid #4c3b70;background:#1b1530;padding:16px;border-radius:12px;color:#d8d0f5}.foot{margin-top:32px;color:var(--muted);font-size:13px}a{color:var(--purple2)}[hidden]{display:none!important}
+</style>
+</head>
+<body><main class="wrap">
+<header class="top"><div class="brand">PCRC / REMOTE CONTROL</div><a class="btn" href="/admin">Admin panel ↗</a></header>
+<h1>Command guide</h1>
+<p class="lead">Справочник команд клиента. Команды выполняются на выбранном компьютере через Telegram или административную панель. Доступные действия зависят от версии клиента и установленных плагинов.</p>
+<div class="actions"><a class="btn primary" href="/guide">Открыть справочник</a><a class="btn" href="#telegram">Команды Telegram</a></div>
+<input id="filter" class="search" type="search" placeholder="Поиск команды или описания…" aria-label="Поиск команды">
+<div class="grid" id="commands">
+<section class="card"><h2>Экран и мышь</h2>
+<div class="cmd"><code>screenshot</code><span>Сделать скриншот всего экрана.</span></div>
+<div class="cmd"><code>screenshot_region x y w h</code><span>Скриншот выбранной области.</span></div>
+<div class="cmd"><code>screen_size</code><span>Разрешение экрана.</span></div>
+<div class="cmd"><code>mouse_move x y</code><span>Переместить курсор.</span></div>
+<div class="cmd"><code>mouse_click [x y] [right|double]</code><span>Щелчок мышью.</span></div>
+<div class="cmd"><code>mouse_scroll n</code><span>Прокрутка колёсика.</span></div>
+<div class="cmd"><code>mouse_pos</code><span>Текущие координаты курсора.</span></div>
+<div class="cmd"><code>mouse_drag x1 y1 x2 y2</code><span>Перетащить мышью.</span></div></section>
+<section class="card"><h2>Клавиатура</h2>
+<div class="cmd"><code>type_text text</code><span>Ввести текст.</span></div><div class="cmd"><code>hotkey ctrl c</code><span>Нажать сочетание клавиш.</span></div><div class="cmd"><code>press_key enter</code><span>Нажать одну клавишу.</span></div>
+<div class="cmd"><code>clipboard_get</code><span>Получить текст буфера обмена.</span></div><div class="cmd"><code>clipboard_set text</code><span>Установить текст буфера.</span></div><div class="cmd"><code>clipboard_history</code><span>История буфера, если поддерживается.</span></div></section>
+<section class="card"><h2>Файлы и папки</h2>
+<div class="cmd"><code>pwd</code><span>Текущая рабочая папка.</span></div><div class="cmd"><code>cd path</code><span>Изменить рабочую папку.</span></div><div class="cmd"><code>ls [path]</code><span>Список файлов; также алиасы dir и sd.</span></div>
+<div class="cmd"><code>read_file path</code><span>Прочитать файл.</span></div><div class="cmd"><code>write_file path | content</code><span>Записать содержимое файла.</span></div><div class="cmd"><code>download_file path</code><span>Подготовить файл к скачиванию.</span></div><div class="cmd"><code>create name | content</code><span>Создать файл.</span></div><div class="cmd"><code>delete_file path</code><span>Удалить файл.</span></div><div class="cmd"><code>copy_file src | dst</code><span>Копировать файл.</span></div><div class="cmd"><code>move_file src | dst</code><span>Переместить файл.</span></div><div class="cmd"><code>mkdir path</code><span>Создать папку.</span></div><div class="cmd"><code>find_file pattern [path]</code><span>Найти файлы.</span></div><div class="cmd"><code>recent_files</code><span>Недавно изменённые/использованные файлы.</span></div><div class="cmd"><code>zip_folder path</code><span>Архивировать папку.</span></div></section>
+<section class="card"><h2>Система и сеть</h2>
+<div class="cmd"><code>status</code><span>Сводка о состоянии компьютера.</span></div><div class="cmd"><code>sysinfo</code><span>Информация об ОС и оборудовании.</span></div><div class="cmd"><code>cpu</code><span>Загрузка процессора.</span></div><div class="cmd"><code>ram</code><span>Использование памяти.</span></div><div class="cmd"><code>disk</code><span>Использование диска.</span></div><div class="cmd"><code>uptime</code><span>Время работы системы.</span></div><div class="cmd"><code>battery</code><span>Состояние батареи.</span></div><div class="cmd"><code>temp</code><span>Температурные данные, если доступны.</span></div><div class="cmd"><code>processes [n]</code><span>Список процессов.</span></div><div class="cmd"><code>kill_process name</code><span>Завершить указанный процесс.</span></div><div class="cmd"><code>whoami</code><span>Текущий пользователь.</span></div><div class="cmd"><code>env</code><span>Переменные окружения.</span></div><div class="cmd"><code>network</code><span>Сводка о сети.</span></div><div class="cmd"><code>connections</code><span>Сетевые соединения.</span></div><div class="cmd"><code>public_ip</code><span>Публичный IP.</span></div><div class="cmd"><code>ping_host host</code><span>Проверить доступность узла.</span></div><div class="cmd"><code>traceroute host</code><span>Маршрут до узла.</span></div><div class="cmd"><code>wifi_list</code><span>Список Wi-Fi сетей.</span></div><div class="cmd"><code>wifi_password</code><span>Информация о сохранённых Wi-Fi профилях — использовать только на своём устройстве с разрешением владельца.</span></div></section>
+<section class="card"><h2>Приложения, звук и уведомления</h2>
+<div class="cmd"><code>open_app path</code><span>Открыть приложение.</span></div><div class="cmd"><code>open_url url</code><span>Открыть URL.</span></div><div class="cmd"><code>close_app name</code><span>Закрыть приложение.</span></div><div class="cmd"><code>list_windows</code><span>Список окон.</span></div><div class="cmd"><code>notify message</code><span>Показать уведомление.</span></div><div class="cmd"><code>msgbox text</code><span>Показать диалоговое окно.</span></div><div class="cmd"><code>speak text</code><span>Озвучить текст.</span></div><div class="cmd"><code>play_sound</code><span>Воспроизвести звук.</span></div><div class="cmd"><code>volume n</code><span>Установить громкость.</span></div></section>
+<section class="card"><h2>Питание и запуск команд</h2>
+<div class="cmd"><code>shutdown [seconds]</code><span>Запланировать выключение.</span></div><div class="cmd"><code>restart [seconds]</code><span>Перезагрузить компьютер.</span></div><div class="cmd"><code>cancel_shutdown</code><span>Отменить запланированное выключение.</span></div><div class="cmd"><code>sleep</code><span>Перевести компьютер в сон.</span></div><div class="cmd"><code>lock</code><span>Заблокировать экран.</span></div><div class="cmd"><code>shell command</code><span>Выполнить команду оболочки.</span></div><div class="cmd"><code>powershell command</code><span>Выполнить команду PowerShell.</span></div><div class="cmd"><code>run_script path</code><span>Запустить скрипт.</span></div><div class="cmd"><code>help</code><span>Показать доступные команды клиента.</span></div></section>
+<section class="card"><h2>Команды и плагины</h2>
+<div class="cmd"><code>accept [file]</code><span>Поддерживается не во всех версиях клиента.</span></div><div class="cmd"><code>plugin commands</code><span>Команды зависят от установленных плагинов; список запрашивается через Plugins в Telegram.</span></div><div class="cmd"><code> /and </code><span>Цепочка команд: пример <code>screenshot /and notify Done</code>. Выполняйте только понятные и разрешённые действия.</span></div></section>
+</div>
+<section class="card" id="telegram" style="margin-top:18px"><h2>Telegram bot</h2>
+<div class="cmd"><code>/start</code><span>Начало работы и меню пользователя.</span></div>
+<div class="cmd"><code><a href="/guide">/guide</a></code><span>Открывает этот справочник в браузере и показывает команды, доступные вашей роли.</span></div>
+<div class="cmd"><code>/panel</code><span>Ссылка на веб-панель администратора (для администраторов).</span></div>
+<div class="cmd"><code>/scripts, /online, /offline</code><span>Список компьютеров и статус.</span></div>
+<div class="cmd"><code>/send &lt;computer&gt; &lt;command&gt;</code><span>Отправить команду компьютеру (администратор).</span></div>
+<div class="cmd"><code>/broadcast &lt;command&gt;</code><span>Отправить команду всем онлайн-компьютерам (администратор).</span></div>
+<div class="cmd"><code>/sessions, /users</code><span>Сессии и привязанные пользователи.</span></div>
+<div class="cmd"><code>/bind, /unbind</code><span>Управление привязками.</span></div>
+<div class="cmd"><code>/pair &lt;computer&gt;, /claim &lt;code&gt;</code><span>Безопасное связывание через одноразовый код.</span></div>
+<div class="cmd"><code>/group, /groups, /renamegroup</code><span>Управление группами компьютеров.</span></div>
+<div class="cmd"><code>/moderator, /moderators, /modremove</code><span>Управление модераторами.</span></div>
+<div class="cmd"><code>/remove &lt;computer&gt;</code><span>Удалить из списка только отключённый компьютер.</span></div>
+<div class="note">Примечание: команды клиента определяются установленной версией и плагинами. На данный момент в клиентском реестре обнаружено 67 core command names/aliases; список выше отражает поддерживаемые имена, а некоторые команды могут иметь дополнительные аргументы.</div>
+</section>
+<footer class="foot">PCRC · Command reference · <a href="https://github.com/look-afk/pcrc-client">Client repository</a></footer>
+</main>
+<script>
+const filter=document.getElementById('filter');
+filter.addEventListener('input',()=>{const q=filter.value.toLowerCase().trim();document.querySelectorAll('#commands .card').forEach(card=>{let visible=0;card.querySelectorAll('.cmd').forEach(row=>{const show=row.textContent.toLowerCase().includes(q);row.hidden=!show;if(show)visible++});card.hidden=Boolean(q)&&visible===0})});
+</script>
+</body></html>
