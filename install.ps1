@@ -135,7 +135,14 @@ try {
                 dynamic_energy = $true; tts_rate = 165; tts_voice_id = $null
             }
         }
-        $configObj | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $InstDir "config.json") -Encoding UTF8
+        # FIX: Set-Content -Encoding UTF8 on Windows PowerShell writes a UTF-8
+        # BOM at the start of the file. Python's json.loads() chokes on that
+        # BOM and throws, which client_final.py's load_config() silently
+        # swallowed — so the exe never saw the name/secret_key we just wrote
+        # and popped its own "First Setup" dialog right after this script
+        # finished. Writing without a BOM fixes it.
+        $jsonText = $configObj | ConvertTo-Json -Depth 5
+        [System.IO.File]::WriteAllText((Join-Path $InstDir "config.json"), $jsonText, (New-Object System.Text.UTF8Encoding($false)))
         Write-Ok "config.json создан"
     }
 
