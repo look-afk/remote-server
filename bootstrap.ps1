@@ -167,7 +167,7 @@ try {
             $defaultJson = @{
                 name       = "MyPC"
                 secret_key = "измени_пароль"
-                server_url = "wss://your-server.onrender.com"
+                server_url = "wss://remote-server-mr8v.onrender.com"
                 update_url = ""
             } | ConvertTo-Json
             [System.IO.File]::WriteAllText((Join-Path $InstDir "config.json"), $defaultJson, $NoBomUtf8)
