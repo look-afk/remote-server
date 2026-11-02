@@ -484,6 +484,53 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+
+async def tg_guide(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the public command guide and the relevant Telegram command list."""
+    user_id = update.effective_user.id if update.effective_user else 0
+    guide_url = f"{PUBLIC_URL}/guide"
+    if user_id in ADMIN_IDS:
+        summary = (
+            "Admin commands:\\n"
+            "/start — main menu\\n/guide — command guide\\n/panel — web admin panel\\n"
+            "/scripts, /online, /offline — computer status\\n"
+            "/send <computer> <command> — send command\\n"
+            "/broadcast <command> — send to online computers\\n"
+            "/sessions, /users — sessions and linked users\\n"
+            "/bind, /unbind — manage user bindings\\n"
+            "/pair <computer> — issue one-time pairing code\\n"
+            "/claim <code> — claim a pairing code\\n"
+            "/remove <computer> — remove an offline computer\\n"
+            "/group, /groups, /renamegroup — manage groups\\n"
+            "/moderator, /moderators, /modremove — manage moderators\\n\\n"
+            f"Full client command reference: {guide_url}"
+        )
+    elif user_groups(user_id):
+        summary = (
+            "Moderator commands:\\n"
+            "/guide — command guide\\n/groups, /scripts, /online, /offline — group and computer status\\n"
+            "/send <group> <computer> <command> — send an allowed command\\n"
+            "/broadcast <group> <command> — broadcast an allowed command\\n\\n"
+            f"Full client command reference: {guide_url}"
+        )
+    elif user_bindings.get(user_id):
+        summary = (
+            "User commands:\\n"
+            "/guide — command guide\\n"
+            "Use the menu for Screenshot, Lock screen, System info, Battery, Restart, and Power off.\\n"
+            "Tap Plugins to see plugin commands available on your computer.\\n\\n"
+            f"Full client command reference: {guide_url}"
+        )
+    else:
+        summary = (
+            "Command guide:\\n"
+            "/guide — show this guide\\n"
+            "/claim <code> — connect your account using a one-time code from the admin.\\n\\n"
+            f"Full guide: {guide_url}"
+        )
+    await update.effective_message.reply_text(summary, disable_web_page_preview=True)
+
+
 async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id in ADMIN_IDS:
         await update.message.reply_text(
@@ -1088,6 +1135,17 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+
+async def h_index(request: web.Request) -> web.Response:
+    """Serve the public command guide at / and /guide."""
+    index_path = Path(__file__).resolve().with_name("index.html")
+    try:
+        html = index_path.read_text(encoding="utf-8")
+    except OSError:
+        return web.Response(text="PCRC command guide is unavailable.", status=503)
+    return web.Response(text=html, content_type="text/html", charset="utf-8")
+
+
 async def h_keepalive_ping(request: web.Request) -> web.Response:
     return web.Response(text="OK")
 
@@ -1460,7 +1518,7 @@ async def main() -> None:
     if BOT_TOKEN:
         tg_app = Application.builder().token(BOT_TOKEN).build()
         for cmd, handler in [
-            ("start", tg_start_v2), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
+            ("start", tg_start_v2), ("guide", tg_guide), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
@@ -1479,7 +1537,8 @@ async def main() -> None:
         log.warning("BOT_TOKEN not set")
 
     app = web.Application()
-    app.router.add_get("/", h_keepalive_ping)
+    app.router.add_get("/", h_index)
+    app.router.add_get("/guide", h_index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/admin", h_admin)
     app.router.add_get("/api/status", h_status)
