@@ -25,7 +25,7 @@ log = logging.getLogger("rc")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
 SECRET_KEY = os.getenv("SECRET_KEY", "")  # НЕ хардкодить! Обязателен через переменную окружения
-PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com")
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com").rstrip("/")
 PORT = int(os.getenv("PORT", 8080))
 UPDATE_VERSION = int(os.getenv("UPDATE_VERSION", "1"))
 UPDATE_EXE_URL = os.getenv("UPDATE_EXE_URL", "")
@@ -1087,17 +1087,6 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "Do not share the key or a link containing it."
     )
 
-async def tg_guide(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send the URL of the current HTML admin panel to the main admin."""
-    if not update.effective_user or update.effective_user.id not in ADMIN_IDS:
-        await update.effective_message.reply_text("Admin only")
-        return
-    await update.effective_message.reply_text(
-        f"HTML guide / admin panel: {PANEL_URL}\n"
-        "The page is served from admin_panel.html. "
-        "Enter the separate ADMIN_API_KEY when prompted; do not share it."
-    )
-
 
 async def h_keepalive_ping(request: web.Request) -> web.Response:
     return web.Response(text="OK")
@@ -1474,7 +1463,7 @@ async def main() -> None:
             ("start", tg_start_v2), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
-            ("unbind", tg_unbind), ("panel", tg_panel), ("guide", tg_guide),
+            ("unbind", tg_unbind), ("panel", tg_panel),
             ("group", tg_group), ("groups", tg_groups), ("moderator", tg_moderator), ("claim", tg_claim),
             ("renamegroup", tg_renamegroup), ("moderators", tg_moderators), ("modremove", tg_modremove),
             ("pair", tg_pair),
