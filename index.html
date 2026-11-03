@@ -20,7 +20,8 @@ code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
 .brand img{width:34px;height:34px;object-fit:contain}
 .brand small{display:block;font-size:11px;letter-spacing:.14em;color:var(--mu);font-weight:500}
 .btn{display:inline-flex;align-items:center;font:inherit;font-weight:500;color:var(--tx);background:transparent;border:1px solid var(--line);border-radius:8px;padding:10px 18px;text-decoration:none;cursor:pointer}
-.btn{transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}\n.btn:hover{border-color:var(--or);transform:translateY(-1px)}
+.btn{transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}
+.btn:hover{border-color:var(--or);transform:translateY(-1px)}
 .btn.light{background:#fff;color:#000;border-color:#fff}
 .hero{padding:64px 0 40px}
 h1{margin:0;font-weight:400;font-size:clamp(38px,6.4vw,76px);line-height:1.08;letter-spacing:-.025em}
@@ -30,18 +31,21 @@ h1 em{font-style:normal;color:var(--or-soft)}
 .bar input{flex:1 1 320px;max-width:560px;height:54px;padding:0 18px;font:inherit;font-size:18px;color:var(--tx);background:#000;border:1px solid var(--line);border-radius:8px}
 .bar input:focus{border-color:var(--or);outline:none;box-shadow:0 0 0 3px var(--or-bg)}
 .bar .btn{height:54px;padding:0 24px}
-.layout{position:relative;display:block;padding-left:290px;padding-bottom:64px}
-aside{position:absolute;top:0;left:0;width:260px;display:flex;flex-direction:column;gap:4px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px}
-aside a{display:flex;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:9px;color:var(--mu);text-decoration:none;font-size:16px}
-aside a{transition:background .2s ease,color .2s ease}\naside a:hover,aside a.on{background:var(--or-bg);color:var(--or-soft)}
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:48px;align-items:start;padding-bottom:64px}
+aside{position:sticky;top:24px;display:flex;flex-direction:column;gap:4px;padding:8px;background:transparent}
+aside a{display:flex;justify-content:space-between;gap:10px;padding:11px 13px;border-radius:9px;color:var(--mu);text-decoration:none;font-size:16px;line-height:1.45}
+aside a{transition:background .2s ease,color .2s ease}
+aside a:hover,aside a.on{background:var(--or-bg);color:var(--or-soft)}
 aside small{color:#71717a}
-.sec{margin-bottom:44px;scroll-margin-top:24px;animation:sectionIn .45s ease both}\n@keyframes sectionIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sec{margin-bottom:44px;scroll-margin-top:24px;animation:sectionIn .45s ease both}
+@keyframes sectionIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .sec h2{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;font-size:24px;font-weight:600}
 .sec h2 small{color:var(--mu);font-size:14px;font-weight:400}
 ul{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
 li{display:grid;grid-template-columns:minmax(200px,36%) 1fr auto;gap:6px 20px;align-items:baseline;padding:12px 18px;border-top:1px solid var(--line)}
 li:first-child{border-top:0}
-li{transition:background .18s ease,border-color .18s ease}\nli:hover{background:var(--hov)}
+li{transition:background .18s ease,border-color .18s ease}
+li:hover{background:var(--hov)}
 li.warn{box-shadow:inset 3px 0 var(--warn)}
 li>code{font-size:14px;overflow-wrap:anywhere}
 li>code b{color:var(--tx);font-weight:600}
@@ -50,13 +54,17 @@ li p{margin:0;color:#c4c4cc;font-size:14.5px}
 li p code{background:#000;padding:1px 6px;border-radius:5px;font-size:13px}
 .act{display:flex;gap:8px;align-items:center}
 .act em{font-style:normal;font-size:12px;color:var(--warn);border:1px solid #5c4a1a;background:#221b0a;border-radius:999px;padding:1px 10px}
-.act button{font:inherit;font-size:12px;color:var(--mu);background:transparent;border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:0;transition:opacity .18s ease,color .18s ease,border-color .18s ease,background .18s ease}\n.act button:hover{color:var(--or-soft);border-color:var(--or);background:var(--or-bg)}
+.act button{font:inherit;font-size:12px;color:var(--mu);background:transparent;border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:0;transition:opacity .18s ease,color .18s ease,border-color .18s ease,background .18s ease}
+.act button:hover{color:var(--or-soft);border-color:var(--or);background:var(--or-bg)}
 li:hover .act button,.act button:focus-visible{opacity:1}
-@media(hover:none){.act button{opacity:1}}\nhtml{scroll-behavior:smooth}\n::selection{background:rgba(168,85,247,.3);color:#fff}\n@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+@media(hover:none){.act button{opacity:1}}
+html{scroll-behavior:smooth}
+::selection{background:rgba(168,85,247,.3);color:#fff}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 .note{margin-top:14px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;color:var(--mu);font-size:14px}
 .empty{padding:48px 0;text-align:center;color:var(--mu)}
 footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--mu);font-size:14px}
-@media(max-width:900px){.layout{display:grid;grid-template-columns:1fr;padding-left:0;gap:16px}aside{position:sticky;top:0;left:auto;z-index:5;width:100%;flex-direction:row;overflow-x:auto;background:var(--bg);padding:10px;border:1px solid var(--line);border-radius:12px}aside a{flex:none;white-space:nowrap}}
+@media(max-width:900px){.layout{grid-template-columns:1fr;gap:16px}aside{position:sticky;top:0;z-index:5;width:100%;flex-direction:row;overflow-x:auto;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line)}aside a{flex:none;white-space:nowrap}}
 @media(max-width:700px){.w{padding:0 16px}li{grid-template-columns:1fr auto}li p{grid-column:1/-1}.hero{padding-top:40px}}
 </style>
 </head>
@@ -260,7 +268,8 @@ document.getElementById('f').addEventListener('input', e => {
     s.querySelectorAll('li').forEach(li => { const ok = li.dataset.t.includes(q); li.hidden = !ok; n += ok; });
     s.hidden = !n; nav.children[i].hidden = !n; total += n;
   });
-  document.getElementById('empty').hidden = total > 0;\n  document.getElementById('empty').textContent = q ? 'Ничего не найдено. Попробуйте другое слово или нажмите Esc, чтобы очистить поиск.' : 'Нет доступных команд.';
+  document.getElementById('empty').hidden = total > 0;
+  document.getElementById('empty').textContent = q ? 'Ничего не найдено. Попробуйте другое слово или нажмите Esc, чтобы очистить поиск.' : 'Нет доступных команд.';
 });
 
 const io = new IntersectionObserver(es => es.forEach(e => {
