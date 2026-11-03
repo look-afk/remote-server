@@ -30,9 +30,9 @@ h1 em{font-style:normal;color:var(--or-soft)}
 .bar input{flex:1 1 320px;max-width:560px;height:54px;padding:0 18px;font:inherit;font-size:18px;color:var(--tx);background:#000;border:1px solid var(--line);border-radius:8px}
 .bar input:focus{border-color:var(--or);outline:none;box-shadow:0 0 0 3px var(--or-bg)}
 .bar .btn{height:54px;padding:0 24px}
-.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px;align-items:start;padding-bottom:64px}
-aside{position:sticky;top:20px;display:flex;flex-direction:column;gap:2px}
-aside a{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:8px;color:var(--mu);text-decoration:none;font-size:15px}
+.layout{position:relative;display:block;padding-left:290px;padding-bottom:64px}
+aside{position:absolute;top:0;left:0;width:260px;display:flex;flex-direction:column;gap:4px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+aside a{display:flex;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:9px;color:var(--mu);text-decoration:none;font-size:16px}
 aside a{transition:background .2s ease,color .2s ease}\naside a:hover,aside a.on{background:var(--or-bg);color:var(--or-soft)}
 aside small{color:#71717a}
 .sec{margin-bottom:44px;scroll-margin-top:24px;animation:sectionIn .45s ease both}\n@keyframes sectionIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -56,7 +56,7 @@ li:hover .act button,.act button:focus-visible{opacity:1}
 .note{margin-top:14px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;color:var(--mu);font-size:14px}
 .empty{padding:48px 0;text-align:center;color:var(--mu)}
 footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--mu);font-size:14px}
-@media(max-width:900px){.layout{grid-template-columns:1fr;gap:16px}aside{position:sticky;top:0;z-index:5;flex-direction:row;overflow-x:auto;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line)}aside a{flex:none;white-space:nowrap}}
+@media(max-width:900px){.layout{display:grid;grid-template-columns:1fr;padding-left:0;gap:16px}aside{position:sticky;top:0;left:auto;z-index:5;width:100%;flex-direction:row;overflow-x:auto;background:var(--bg);padding:10px;border:1px solid var(--line);border-radius:12px}aside a{flex:none;white-space:nowrap}}
 @media(max-width:700px){.w{padding:0 16px}li{grid-template-columns:1fr auto}li p{grid-column:1/-1}.hero{padding-top:40px}}
 </style>
 </head>
