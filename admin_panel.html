@@ -1,1038 +1,154 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Remote Control — Admin</title>
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="https://raw.githubusercontent.com/look-afk/pcrc-client/master/assets/icon.ico" type="image/x-icon">
+<title>PCRC · Control</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-:root {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --border: #30363d;
-  --border-light: #444c56;
-  --text-primary: #c9d1d9;
-  --text-secondary: #8b949e;
-  --accent: #79c0ff;
-  --accent-alt: #58a6ff;
-  --success: #3fb950;
-  --danger: #f85149;
-  --warning: #d29922;
-  --info: #79c0ff;
-}
-
-html, body { 
-  width: 100%; 
-  height: 100%; 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  overflow: hidden;
-}
-
-/* PERMISSION MODAL */
-.permission-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  backdrop-filter: blur(4px);
-}
-
-.permission-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  padding: 40px;
-  max-width: 450px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-.permission-icon {
-  font-size: 3rem;
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-.permission-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 12px;
-  text-align: center;
-}
-
-.permission-subtitle {
-  color: var(--text-secondary);
-  text-align: center;
-  margin-bottom: 24px;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
-.permission-list {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px;
-  margin-bottom: 24px;
-  font-size: 0.9rem;
-}
-
-.permission-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  color: var(--text-secondary);
-}
-
-.permission-item:not(:last-child) {
-  border-bottom: 1px solid var(--border);
-}
-
-.permission-item-icon {
-  color: var(--success);
-  font-weight: bold;
-}
-
-.permission-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.btn-permission {
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s;
-  font-size: 0.95rem;
-}
-
-.btn-allow {
-  background: var(--success);
-  color: #fff;
-  border-color: var(--success);
-}
-
-.btn-allow:hover {
-  background: #2ea043;
-  box-shadow: 0 0 20px rgba(63, 185, 80, 0.3);
-}
-
-.btn-deny {
-  background: var(--bg-primary);
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
-.btn-deny:hover {
-  background: var(--danger);
-  color: #fff;
-}
-
-/* PASSWORD MODAL */
-.password-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.95);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 9998;
-  backdrop-filter: blur(5px);
-}
-
-.password-overlay.active {
-  display: flex;
-}
-
-.password-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  padding: 40px;
-  max-width: 400px;
-  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.9);
-  animation: slideDown 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes slideDown {
-  from { transform: translateY(-30px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-.password-icon {
-  font-size: 2.5rem;
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-.password-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  text-align: center;
-}
-
-.password-subtitle {
-  color: var(--text-secondary);
-  text-align: center;
-  margin-bottom: 24px;
-  font-size: 0.9rem;
-}
-
-.password-input {
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 1rem;
-  margin-bottom: 16px;
-  transition: border-color 0.2s;
-}
-
-.password-input:focus {
-  outline: none;
-  border-color: var(--accent-alt);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
-}
-
-.password-input.error {
-  border-color: var(--danger);
-  box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.1);
-}
-
-.error-message {
-  color: var(--danger);
-  font-size: 0.85rem;
-  margin-bottom: 12px;
-  display: none;
-  text-align: center;
-}
-
-.error-message.show {
-  display: block;
-}
-
-.btn-unlock {
-  width: 100%;
-  padding: 12px;
-  background: var(--accent-alt);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 0.95rem;
-  transition: all 0.2s;
-}
-
-.btn-unlock:hover {
-  background: #65b1ff;
-  box-shadow: 0 0 20px rgba(88, 166, 255, 0.3);
-}
-
-.btn-unlock:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* BLOCKED STATE */
-.blocked-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg-primary);
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.blocked-screen.show {
-  display: flex;
-}
-
-.blocked-content {
-  text-align: center;
-}
-
-.blocked-icon {
-  font-size: 4rem;
-  margin-bottom: 20px;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.blocked-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: var(--danger);
-}
-
-.blocked-text {
-  color: var(--text-secondary);
-  font-size: 1rem;
-  margin-bottom: 20px;
-  line-height: 1.6;
-}
-
-/* MAIN UI */
-.layout {
-  display: flex;
-  height: 100vh;
-}
-
-.sidebar {
-  width: 280px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.logo-section {
-  padding: 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.logo-icon {
-  font-size: 1.8rem;
-}
-
-.logo-text {
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.logo-sub {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  display: block;
-}
-
-.nav-section {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.nav-label {
-  padding: 8px 16px;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.nav-item {
-  padding: 10px 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border-left: 3px solid transparent;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-}
-
-.nav-item:hover {
-  background: var(--bg-tertiary);
-  color: var(--accent);
-  border-left-color: var(--accent);
-}
-
-.nav-item.active {
-  background: var(--accent)15;
-  color: var(--accent);
-  border-left-color: var(--accent);
-}
-
-.script-item {
-  padding: 10px 16px;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.2s;
-  font-size: 0.9rem;
-}
-
-.script-item:hover {
-  background: var(--bg-tertiary);
-  border-left-color: var(--accent);
-}
-
-.script-item.active {
-  background: var(--accent)15;
-  color: var(--accent);
-  border-left-color: var(--accent);
-}
-
-.script-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
-.script-status.online {
-  background: var(--success);
-}
-
-.main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-}
-
-.header {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-  padding: 16px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.header-stats {
-  display: flex;
-  gap: 20px;
-  font-size: 0.85rem;
-}
-
-.stat {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-}
-
-.stat-value {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.content-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-}
-
-.card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.card-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.input-group {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.input-field {
-  flex: 1;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 12px 14px;
-  color: var(--text-primary);
-  font-size: 0.95rem;
-  font-family: 'Courier New', monospace;
-  transition: border-color 0.2s;
-}
-
-.input-field:focus {
-  outline: none;
-  border-color: var(--accent-alt);
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
-}
-
-.btn-primary {
-  background: var(--accent-alt);
-  color: #fff;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.btn-primary:hover {
-  background: #65b1ff;
-  box-shadow: 0 0 20px rgba(88, 166, 255, 0.3);
-}
-
-.btn-primary:active {
-  transform: scale(0.98);
-}
-
-.command-history {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 12px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.history-item {
-  padding: 8px;
-  border-left: 3px solid var(--accent);
-  margin-bottom: 6px;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border-radius: 4px;
-}
-
-.history-time {
-  color: var(--text-secondary);
-  display: block;
-  font-size: 0.75rem;
-  margin-bottom: 4px;
-}
-
-.suggestions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.suggestion-btn {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.2s;
-  color: var(--accent);
-  text-align: center;
-}
-
-.suggestion-btn:hover {
-  border-color: var(--accent);
-  background: var(--accent)10;
-}
-
-/* SCROLLBAR */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-light);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border);
-}
-
-@media (max-width: 768px) {
-  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
-  .layout { flex-direction: column; }
-  .header-stats { display: none; }
-}
-
-.hidden { display: none !important; }
+:root{color-scheme:dark;--bg:#0b0d10;--panel:#11151a;--panel2:#151a20;--line:#252c35;--text:#e8edf3;--muted:#87919e;--accent:#a78bfa;--green:#9be3b0;--red:#ff8d8d;--amber:#c4b5fd}
+*{box-sizing:border-box}html{min-width:320px;background:var(--bg)}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.005em}button,input,select,textarea{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shell{max-width:1440px;margin:auto;padding:28px 32px 48px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-bottom:25px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:13px}.brand-mark{width:42px;height:42px;flex:none;border:1px solid #4c3b70;border-radius:11px;display:grid;place-items:center;overflow:hidden;background:transparent;color:var(--accent);font-weight:800;font-size:17px}.brand-mark img{display:block;width:100%;height:100%;object-fit:contain;padding:2px}.brand-name{font-size:14px;font-weight:700;letter-spacing:.12em}.brand-caption{font-size:12px;color:var(--muted);margin-top:2px}.top-actions{display:flex;align-items:center;gap:12px}.connection{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}.dot{width:7px;height:7px;border-radius:50%;background:#5d6570}.dot.live{background:var(--green);box-shadow:0 0 0 3px #9be3b01a}.btn{border:1px solid var(--line);border-radius:8px;background:#171c22;color:var(--text);padding:9px 13px;font-weight:600;font-size:12px;transition:border-color .15s,background .15s}.btn:hover{border-color:#4b5664;background:#1c232b}.btn.primary{background:var(--accent);border-color:var(--accent);color:#170f25}.btn.primary:hover{background:#c4b5fd}.btn:disabled{opacity:.45;cursor:not-allowed}
+.intro{display:flex;justify-content:space-between;align-items:end;gap:24px;padding:31px 0 25px}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);font-weight:700}.intro h1{font-size:clamp(26px,3vw,36px);line-height:1.15;letter-spacing:-.045em;margin:8px 0 8px;font-weight:650}.intro p{margin:0;color:var(--muted);font-size:13px}.updated{color:var(--muted);font-size:12px;white-space:nowrap}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:22px}.stat{padding:18px 20px;background:var(--panel);border:1px solid var(--line);border-radius:11px}.stat-label{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}.stat-value{font-size:29px;font-weight:650;letter-spacing:-.04em;margin-top:7px}.stat-foot{font-size:11px;color:var(--muted);margin-top:1px}.stat-value.good{color:var(--green)}.stat-value.bad{color:var(--red)}
+.layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,.8fr);gap:16px;align-items:start}.panel{border:1px solid var(--line);background:var(--panel);border-radius:11px;overflow:hidden}.panel-head{padding:17px 19px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line)}.panel-title{font-weight:650;font-size:14px}.panel-sub{color:var(--muted);font-size:11px;margin-top:3px}.panel-body{padding:18px 19px}.search{width:min(220px,48%);background:#0c0f13;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--text);font-size:12px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left}th{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:650;padding:12px 19px;border-bottom:1px solid var(--line);white-space:nowrap}td{padding:13px 19px;border-bottom:1px solid #20262d;font-size:12px;white-space:nowrap}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#ffffff04}.pc-name{font-weight:650;color:var(--text)}.state{display:inline-flex;align-items:center;gap:7px;font-size:11px}.state:before{content:"";width:6px;height:6px;border-radius:50%;background:#6a737f}.state.online{color:var(--green)}.state.online:before{background:var(--green)}.state.offline{color:var(--muted)}.row-action{border:1px solid var(--line);background:transparent;border-radius:6px;padding:5px 9px;color:var(--text);font-size:11px}.row-action:hover{border-color:#667180}.empty{padding:34px 18px;text-align:center;color:var(--muted);font-size:12px}
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:15px}.field label{font-size:11px;color:#b3bdc8;font-weight:600}.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);background:#0c0f13;color:var(--text);border-radius:7px;padding:10px 11px;outline:none}.field input:focus,.field select:focus,.field textarea:focus{border-color:#a78bfa}.field textarea{min-height:86px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.field-note{font-size:11px;color:var(--muted)}.form-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.notice{min-height:18px;margin-top:12px;font-size:12px;color:var(--muted)}.notice.ok{color:var(--green)}.notice.error{color:var(--red)}.history{display:flex;flex-direction:column}.history-item{padding:12px 0;border-bottom:1px solid #20262d}.history-item:last-child{border-bottom:0}.history-top{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:10px}.history-command{margin-top:5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;overflow-wrap:anywhere}.history-result{font-size:11px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}.side-stack{display:grid;gap:16px}.footer{padding-top:22px;display:flex;justify-content:space-between;gap:16px;color:#606b78;font-size:10px}
+.login-wrap{position:fixed;inset:0;z-index:20;background:#080a0dcc;backdrop-filter:blur(10px);display:grid;place-items:center;padding:20px}.login-card{width:min(420px,100%);background:#11151a;border:1px solid #303842;border-radius:14px;padding:28px;box-shadow:0 24px 90px #0009}.login-card h2{margin:19px 0 6px;font-size:22px;letter-spacing:-.04em}.login-card p{margin:0 0 23px;color:var(--muted);font-size:12px}.login-card .field{margin-bottom:17px}.login-error{color:var(--red);font-size:12px;min-height:18px;margin-bottom:10px}.hidden{display:none!important}
+@media(max-width:900px){.shell{padding:20px 18px 34px}.layout{grid-template-columns:1fr}.intro{align-items:start;flex-direction:column;gap:10px}.updated{white-space:normal}.stats{gap:8px}.stat{padding:14px}.stat-value{font-size:25px}}
+@media(max-width:560px){.shell{padding:15px 12px 28px}.topbar{align-items:flex-start}.brand-caption{font-size:11px}.connection{display:none}.intro{padding-top:25px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.panel-head{padding:14px}.panel-body{padding:15px}.panel-head .search{width:46%}th,td{padding-left:12px;padding-right:12px}.footer{flex-direction:column}.top-actions{gap:7px}.btn{padding:8px 10px}}
 </style>
 </head>
 <body>
-
-<!-- PERMISSION CHECK -->
-<div class="permission-overlay" id="permissionOverlay">
-  <div class="permission-modal">
-    <div class="permission-icon">🔐</div>
-    <div class="permission-title">Request Access</div>
-    <div class="permission-subtitle">This application requires the following permissions to operate:</div>
-    
-    <div class="permission-list">
-      <div class="permission-item">
-        <span class="permission-item-icon">✓</span>
-        <span>Execute remote commands</span>
+<div class="shell">
+<header class="topbar">
+  <div class="brand"><div class="brand-mark"><img src="https://raw.githubusercontent.com/look-afk/pcrc-client/master/assets/icon.ico" alt="PCRC logo"></div><div><div class="brand-name">PCRC / CONTROL</div><div class="brand-caption">Remote systems console</div></div></div>
+  <div class="top-actions"><div class="connection"><span class="dot" id="connectionDot"></span><span id="connectionText">Not connected</span></div><button class="btn" id="refreshBtn" type="button">Refresh</button><button class="btn" id="logoutBtn" type="button">Sign out</button></div>
+</header>
+<section class="intro"><div><div class="eyebrow">Operations / Overview</div><h1>System overview</h1><p>Live connection state and command dispatch for registered computers.</p></div><div class="updated" id="updatedAt">Waiting for authentication</div></section>
+<section class="stats">
+  <div class="stat"><div class="stat-label">Registered computers</div><div class="stat-value" id="totalCount">—</div><div class="stat-foot">Known to this server</div></div>
+  <div class="stat"><div class="stat-label">Online</div><div class="stat-value good" id="onlineCount">—</div><div class="stat-foot">Active WebSocket sessions</div></div>
+  <div class="stat"><div class="stat-label">Offline</div><div class="stat-value bad" id="offlineCount">—</div><div class="stat-foot">Not currently connected</div></div>
+</section>
+<main class="layout">
+  <section class="panel">
+    <div class="panel-head"><div><div class="panel-title">Computers</div><div class="panel-sub">Select a connected computer to prepare a command.</div></div><input class="search" id="searchInput" type="search" placeholder="Filter computers…" aria-label="Filter computers"></div>
+    <div class="table-wrap"><table><thead><tr><th>Computer</th><th>Status</th><th>Last seen</th><th></th></tr></thead><tbody id="computerRows"><tr><td colspan="4" class="empty">Authenticate to load computer list.</td></tr></tbody></table></div>
+  </section>
+  <div class="side-stack">
+    <section class="panel">
+      <div class="panel-head"><div><div class="panel-title">Command dispatch</div><div class="panel-sub">Commands are sent to the selected online client.</div></div></div>
+      <div class="panel-body">
+        <form id="commandForm">
+          <div class="field"><label for="targetSelect">Target computer</label><select id="targetSelect" required><option value="">Select a computer</option></select></div>
+          <div class="field"><label for="commandInput">Command</label><textarea id="commandInput" required spellcheck="false" placeholder="Enter a supported client command"></textarea><div class="field-note">Use only commands implemented by your client. Review the target before sending.</div></div>
+          <div class="form-actions"><span class="field-note" id="targetStatus">No target selected</span><button class="btn primary" id="sendBtn" type="submit">Send command</button></div>
+          <div class="notice" id="commandNotice" role="status"></div>
+        </form>
       </div>
-      <div class="permission-item">
-        <span class="permission-item-icon">✓</span>
-        <span>View system information</span>
-      </div>
-      <div class="permission-item">
-        <span class="permission-item-icon">✓</span>
-        <span>Control input devices</span>
-      </div>
-      <div class="permission-item">
-        <span class="permission-item-icon">✓</span>
-        <span>Access file system</span>
-      </div>
-    </div>
-    
-    <div class="permission-buttons">
-      <button class="btn-permission btn-allow" onclick="grantPermission()">Allow</button>
-      <button class="btn-permission btn-deny" onclick="denyPermission()">Deny</button>
-    </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><div class="panel-title">Recent activity</div><div class="panel-sub">Latest results received by the server.</div></div></div>
+      <div class="panel-body"><div class="history" id="historyList"><div class="empty">No activity loaded.</div></div></div>
+    </section>
   </div>
+</main>
+<footer class="footer"><span>PCRC · Private administration interface</span><span>Admin API authentication enabled</span></footer>
 </div>
-
-<!-- PASSWORD PROTECTION -->
-<div class="password-overlay" id="passwordOverlay">
-  <div class="password-modal">
-    <div class="password-icon">🔑</div>
-    <div class="password-title">Admin Access</div>
-    <div class="password-subtitle">Enter the admin password to continue</div>
-    
-    <div class="error-message" id="errorMessage">Incorrect password. Try again.</div>
-    
-    <input 
-      type="password" 
-      id="passwordInput" 
-      class="password-input" 
-      placeholder="Enter password" 
-      onkeypress="handlePasswordKeypress(event)"
-      autocomplete="off"
-    >
-    
-    <button class="btn-unlock" id="unlockBtn" onclick="verifyPassword()">Unlock</button>
-  </div>
+<div class="login-wrap" id="loginWrap">
+  <form class="login-card" id="loginForm">
+    <div class="brand"><div class="brand-mark"><img src="https://raw.githubusercontent.com/look-afk/pcrc-client/master/assets/icon.ico" alt="PCRC logo"></div><div><div class="brand-name">PCRC / CONTROL</div><div class="brand-caption">Administrator authentication</div></div></div>
+    <h2>Sign in</h2><p>Enter the server's ADMIN_API_KEY. The key is checked by the server; no local password is created.</p>
+    <div class="field"><label for="apiKeyInput">ADMIN_API_KEY</label><input id="apiKeyInput" type="password" autocomplete="current-password" required placeholder="Enter admin API key"></div>
+    <div class="login-error" id="loginError" role="alert"></div>
+    <button class="btn primary" id="loginBtn" type="submit" style="width:100%">Authenticate</button>
+  </form>
 </div>
-
-<!-- BLOCKED SCREEN -->
-<div class="blocked-screen" id="blockedScreen">
-  <div class="blocked-content">
-    <div class="blocked-icon">🚫</div>
-    <div class="blocked-title">Access Denied</div>
-    <div class="blocked-text">
-      You have been blocked from accessing this panel<br>
-      due to multiple incorrect password attempts or<br>
-      permission denial.
-    </div>
-    <p style="color: var(--text-secondary); font-size: 0.85rem;">This message cannot be dismissed.</p>
-  </div>
-</div>
-
-<!-- MAIN INTERFACE -->
-<div class="layout" id="mainLayout" style="display: none;">
-  
-  <aside class="sidebar">
-    <div class="logo-section">
-      <div class="logo-icon">🖥</div>
-      <div>
-        <div class="logo-text">Remote Control</div>
-        <span class="logo-sub">Admin Panel</span>
-      </div>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-label">Navigation</div>
-      <div class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</div>
-      <div class="nav-item" onclick="switchTab('commands')">⚡ Commands</div>
-      <div class="nav-item" onclick="switchTab('settings')">⚙️ Settings</div>
-    </div>
-
-    <div class="nav-section" style="flex: 1; overflow-y: auto;">
-      <div class="nav-label">Scripts</div>
-      <div id="scriptsList"></div>
-    </div>
-
-    <div class="nav-section">
-      <div class="nav-label">Session</div>
-      <div class="nav-item" onclick="logout()" style="color: var(--danger);">🚪 Logout</div>
-    </div>
-  </aside>
-
-  <div class="main-content">
-    <div class="header">
-      <div class="header-title">Remote Control Admin Panel</div>
-      <div class="header-stats">
-        <div class="stat">Connected: <span class="stat-value" id="connectedCount">0</span></div>
-        <div class="stat">Commands: <span class="stat-value" id="commandCount">0</span></div>
-        <div class="stat" id="sessionTime">Session: 0m</div>
-      </div>
-    </div>
-
-    <div class="content-area">
-      <!-- DASHBOARD TAB -->
-      <div id="dashboard-tab">
-        <div class="card">
-          <div class="card-title">📊 System Overview</div>
-          <div id="systemOverview" style="color: var(--text-secondary);">
-            Loading system information...
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">🎯 Quick Commands</div>
-          <div class="suggestions-grid">
-            <button class="suggestion-btn" onclick="quickCommand('status')">Status</button>
-            <button class="suggestion-btn" onclick="quickCommand('screenshot')">Screenshot</button>
-            <button class="suggestion-btn" onclick="quickCommand('lock')">Lock</button>
-            <button class="suggestion-btn" onclick="quickCommand('shutdown 60')">Shutdown</button>
-            <button class="suggestion-btn" onclick="quickCommand('restart 60')">Restart</button>
-            <button class="suggestion-btn" onclick="quickCommand('battery')">Battery</button>
-            <button class="suggestion-btn" onclick="quickCommand('cpu')">CPU</button>
-            <button class="suggestion-btn" onclick="quickCommand('ram')">RAM</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- COMMANDS TAB -->
-      <div id="commands-tab" style="display: none;">
-        <div class="card">
-          <div class="card-title">⚡ Command Console</div>
-          <div class="input-group">
-            <input 
-              type="text" 
-              id="cmdInput" 
-              class="input-field" 
-              placeholder="screenshot /and lock /and notify Done"
-              onkeypress="handleCommandKeypress(event)"
-            >
-            <button class="btn-primary" onclick="sendCommand()">Send</button>
-          </div>
-          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;">
-            💡 Tip: Use <code>/and</code> to chain commands. If any fails, chain stops (exit on error).
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">📜 Command History</div>
-          <div class="command-history" id="historyList">
-            <div style="color: var(--text-secondary);">No commands yet</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SETTINGS TAB -->
-      <div id="settings-tab" style="display: none;">
-        <div class="card">
-          <div class="card-title">⚙️ Admin Settings</div>
-          <p style="color: var(--text-secondary); margin-bottom: 16px;">
-            Session timeout: 30 minutes<br>
-            Last login: <span id="lastLogin">Just now</span>
-          </p>
-          <button class="btn-primary" style="background: var(--danger);" onclick="logout()">
-            🚪 Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
 <script>
-// ═══════════════════════════════════════════════════════════════════════════════════
-// PERMISSION & PASSWORD SYSTEM
-// ═══════════════════════════════════════════════════════════════════════════════════
-
-let isAccessDenied = false;
-let passwordAttempts = 0;
-const MAX_PASSWORD_ATTEMPTS = 5;
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-let sessionStart = Date.now();
-
-function denyPermission() {
-  isAccessDenied = true;
-  document.getElementById('permissionOverlay').style.display = 'none';
-  showBlockedScreen('Permission denied by user');
+const $=id=>document.getElementById(id);
+let adminKey=sessionStorage.getItem('pcrc_admin_key')||'';
+let computers=[];
+let busy=false;
+function setConnection(ok,text){$('connectionDot').classList.toggle('live',ok);$('connectionText').textContent=text;}
+function setNotice(message,type=''){$('commandNotice').textContent=message;$('commandNotice').className='notice'+(type?' '+type:'');}
+async function api(path,options={}){
+  const headers={'X-Admin-Key':adminKey,...(options.headers||{})};
+  if(options.body)headers['Content-Type']='application/json';
+  const response=await fetch(path,{...options,headers});
+  const data=await response.json().catch(()=>({error:'Invalid server response'}));
+  if(response.status===401){sessionStorage.removeItem('pcrc_admin_key');adminKey='';$('loginWrap').classList.remove('hidden');throw new Error('Invalid ADMIN_API_KEY. Enter the key configured on the server.');}
+  if(!response.ok)throw new Error(data.error||'Request failed ('+response.status+')');
+  return data;
 }
-
-function grantPermission() {
-  localStorage.setItem('permissionGranted', 'true');
-  document.getElementById('permissionOverlay').style.display = 'none';
-  showPasswordPrompt();
+async function authenticate(key){
+  adminKey=key;
+  const data=await api('/api/status');
+  if(data.status!=='ok')throw new Error('Server authentication failed.');
+  sessionStorage.setItem('pcrc_admin_key',key);
+  $('loginWrap').classList.add('hidden');
+  $('loginError').textContent='';
+  await refreshData();
 }
-
-function showPasswordPrompt() {
-  document.getElementById('passwordOverlay').classList.add('active');
-  document.getElementById('passwordInput').focus();
-}
-
-function handlePasswordKeypress(e) {
-  if (e.key === 'Enter') verifyPassword();
-}
-
-function verifyPassword() {
-  const pwd = document.getElementById('passwordInput').value;
-  const adminKey = localStorage.getItem('admin_key') || prompt('Set admin password (first time only):');
-  
-  if (!adminKey) {
-    localStorage.setItem('admin_key', pwd);
-    loginSuccess();
-    return;
-  }
-  
-  if (pwd === adminKey) {
-    loginSuccess();
-  } else {
-    passwordAttempts++;
-    document.getElementById('errorMessage').classList.add('show');
-    document.getElementById('passwordInput').classList.add('error');
-    
-    if (passwordAttempts >= MAX_PASSWORD_ATTEMPTS) {
-      setTimeout(() => {
-        document.getElementById('passwordOverlay').classList.remove('active');
-        showBlockedScreen('Too many incorrect password attempts');
-      }, 1500);
-    } else {
-      setTimeout(() => {
-        document.getElementById('passwordInput').value = '';
-        document.getElementById('passwordInput').classList.remove('error');
-        document.getElementById('errorMessage').classList.remove('show');
-      }, 1000);
-    }
+function renderComputers(){
+  const query=$('searchInput').value.trim().toLowerCase();
+  const filtered=computers.filter(c=>c.name.toLowerCase().includes(query));
+  $('computerRows').innerHTML='';
+  if(!filtered.length){$('computerRows').innerHTML='<tr><td colspan="4" class="empty">'+(computers.length?'No matching computers.':'No computers have connected yet.')+'</td></tr>';return;}
+  for(const c of filtered){
+    const tr=document.createElement('tr');
+    const name=document.createElement('td');name.className='pc-name';name.textContent=c.name;
+    const status=document.createElement('td');const badge=document.createElement('span');badge.className='state '+(c.connected?'online':'offline');badge.textContent=c.connected?'Online':'Offline';status.append(badge);
+    const seen=document.createElement('td');seen.style.color='var(--muted)';seen.textContent=c.last_seen||'never';
+    const action=document.createElement('td');const button=document.createElement('button');button.className='row-action';button.type='button';button.textContent='Select';button.disabled=!c.connected;button.addEventListener('click',()=>{$('targetSelect').value=c.name;updateTargetStatus();$('commandInput').focus();});action.append(button);
+    tr.append(name,status,seen,action);$('computerRows').append(tr);
   }
 }
-
-function loginSuccess() {
-  document.getElementById('passwordOverlay').classList.remove('active');
-  document.getElementById('mainLayout').style.display = 'flex';
-  localStorage.setItem('lastLogin', new Date().toLocaleString());
-  initDashboard();
+function renderTargets(){
+  const old=$('targetSelect').value;
+  $('targetSelect').innerHTML='<option value="">Select a computer</option>';
+  for(const c of computers.filter(c=>c.connected)){const option=document.createElement('option');option.value=c.name;option.textContent=c.name;$('targetSelect').append(option);}
+  if(computers.some(c=>c.connected&&c.name===old))$('targetSelect').value=old;
+  updateTargetStatus();
 }
-
-function showBlockedScreen(reason) {
-  isAccessDenied = true;
-  document.getElementById('blockedScreen').classList.add('show');
-  // Block all reloads and navigation
-  window.onbeforeunload = () => true;
+function updateTargetStatus(){const target=computers.find(c=>c.name===$('targetSelect').value);$('targetStatus').textContent=target?(target.connected?'Online · ready to receive':'Offline · unavailable'):'No target selected';$('sendBtn').disabled=busy||!target||!target.connected;}
+function renderHistory(history){
+  const list=$('historyList');list.innerHTML='';
+  const items=[...(history||[])].reverse().slice(0,8);
+  if(!items.length){list.innerHTML='<div class="empty">No recent activity.</div>';return;}
+  for(const item of items){const wrap=document.createElement('div');wrap.className='history-item';const top=document.createElement('div');top.className='history-top';const who=document.createElement('span');who.textContent=item.script||'Server';const time=document.createElement('span');time.textContent=item.time||'';top.append(who,time);const command=document.createElement('div');command.className='history-command';command.textContent=item.command||'Activity';wrap.append(top,command);if(item.result){const result=document.createElement('div');result.className='history-result';result.textContent=item.result;wrap.append(result);}list.append(wrap);}
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════════
-// DASHBOARD LOGIC
-// ═══════════════════════════════════════════════════════════════════════════════════
-
-let selectedScript = null;
-let commandCount = 0;
-const COMMANDS = ['screenshot', 'lock', 'shutdown', 'restart', 'status', 'cpu', 'ram', 'disk', 'processes', 'notify', 'type_text'];
-
-async function fetchAPI(endpoint, method = 'GET', body = null) {
-  try {
-    const opts = { method, headers: { 'X-Admin-Key': localStorage.getItem('admin_key') } };
-    if (body) {
-      opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
-    }
-    const r = await fetch(endpoint, opts);
-    if (r.status === 401) logout();
-    return await r.json();
-  } catch (e) {
-    console.error('API Error:', e);
-  }
+async function refreshData(){
+  if(!adminKey||busy)return;
+  try{
+    const [status,data]=await Promise.all([api('/api/status'),api('/api/scripts')]);
+    computers=data.scripts||[];
+    $('totalCount').textContent=computers.length;
+    $('onlineCount').textContent=computers.filter(c=>c.connected).length;
+    $('offlineCount').textContent=computers.filter(c=>!c.connected).length;
+    $('updatedAt').textContent='Updated '+new Date().toLocaleTimeString();
+    setConnection(true,'Connected');
+    renderComputers();renderTargets();renderHistory(data.history);
+  }catch(error){setConnection(false,'Connection issue');if(!adminKey)$('loginError').textContent=error.message;else setNotice(error.message,'error');}
 }
-
-async function loadScripts() {
-  const data = await fetchAPI('/api/scripts');
-  if (!data) return;
-  
-  const list = document.getElementById('scriptsList');
-  list.innerHTML = '';
-  document.getElementById('connectedCount').textContent = data.scripts.filter(s => s.connected).length;
-  
-  data.scripts.forEach(s => {
-    const div = document.createElement('div');
-    div.className = `script-item ${s.connected ? 'active' : ''}`;
-    div.onclick = () => selectScript(s.name);
-    div.innerHTML = `
-      <span>${s.name}</span>
-      <span class="script-status ${s.connected ? 'online' : ''}"></span>
-    `;
-    list.appendChild(div);
-  });
-}
-
-function selectScript(name) {
-  selectedScript = name;
-  document.querySelectorAll('.script-item').forEach(el => el.classList.remove('active'));
-  event.target.closest('.script-item').classList.add('active');
-}
-
-async function sendCommand() {
-  const input = document.getElementById('cmdInput');
-  const cmd = input.value.trim();
-  
-  if (!cmd) {
-    alert('Enter a command');
-    return;
-  }
-  
-  if (!selectedScript) {
-    alert('Select a script first');
-    return;
-  }
-  
-  input.disabled = true;
-  const parts = cmd.split(/\s+\/and\s+/);
-  let executed = 0;
-  
-  for (const part of parts) {
-    try {
-      await fetchAPI('/api/send', 'POST', { script: selectedScript, command: part.trim() });
-      executed++;
-      commandCount++;
-      addHistory(`${selectedScript}: ${part.trim()}`);
-      await new Promise(r => setTimeout(r, 200));
-    } catch (e) {
-      // CHAIN STOPS ON ERROR (exit on error)
-      addHistory(`❌ Chain stopped: ${part.trim()}`);
-      break;
-    }
-  }
-  
-  document.getElementById('commandCount').textContent = commandCount;
-  input.value = '';
-  input.disabled = false;
-  input.focus();
-}
-
-function quickCommand(cmd) {
-  document.getElementById('cmdInput').value = cmd;
-  switchTab('commands');
-  setTimeout(() => sendCommand(), 100);
-}
-
-function handleCommandKeypress(e) {
-  if (e.key === 'Enter') sendCommand();
-}
-
-function addHistory(text) {
-  const list = document.getElementById('historyList');
-  if (list.textContent.includes('No commands')) {
-    list.innerHTML = '';
-  }
-  
-  const item = document.createElement('div');
-  item.className = 'history-item';
-  const now = new Date().toLocaleTimeString();
-  item.innerHTML = `<span class="history-time">${now}</span>${text}`;
-  list.insertBefore(item, list.firstChild);
-}
-
-function switchTab(tab) {
-  document.querySelectorAll('[id$="-tab"]').forEach(el => el.style.display = 'none');
-  document.getElementById(tab + '-tab').style.display = 'block';
-  
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  event.target.classList.add('active');
-}
-
-function logout() {
-  localStorage.removeItem('admin_key');
-  localStorage.removeItem('permissionGranted');
-  location.reload();
-}
-
-// SESSION TIMER
-setInterval(() => {
-  const elapsed = Date.now() - sessionStart;
-  const mins = Math.floor(elapsed / 60000);
-  document.getElementById('sessionTime').textContent = `Session: ${mins}m`;
-  
-  if (elapsed > SESSION_TIMEOUT) {
-    logout();
-  }
-}, 1000);
-
-// INIT
-function initDashboard() {
-  document.getElementById('lastLogin').textContent = localStorage.getItem('lastLogin') || 'Just now';
-  loadScripts();
-  setInterval(loadScripts, 3000);
-}
-
-// ON LOAD
-window.addEventListener('load', () => {
-  if (isAccessDenied) return;
-  
-  const permGranted = localStorage.getItem('permissionGranted');
-  const adminKey = localStorage.getItem('admin_key');
-  
-  if (!permGranted) {
-    document.getElementById('permissionOverlay').style.display = 'flex';
-  } else if (!adminKey || passwordAttempts === 0) {
-    showPasswordPrompt();
-  } else {
-    loginSuccess();
-  }
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();const key=$('apiKeyInput').value.trim();if(!key)return;$('loginBtn').disabled=true;$('loginError').textContent='Checking key…';try{await authenticate(key);}catch(error){adminKey='';sessionStorage.removeItem('pcrc_admin_key');$('loginError').textContent=error.message;$('loginWrap').classList.remove('hidden');}finally{$('loginBtn').disabled=false;}});
+$('logoutBtn').addEventListener('click',()=>{adminKey='';sessionStorage.removeItem('pcrc_admin_key');$('loginWrap').classList.remove('hidden');$('apiKeyInput').value='';setConnection(false,'Not connected');});
+$('refreshBtn').addEventListener('click',refreshData);
+$('searchInput').addEventListener('input',renderComputers);
+$('targetSelect').addEventListener('change',updateTargetStatus);
+$('commandForm').addEventListener('submit',async e=>{
+ e.preventDefault();const target=$('targetSelect').value;const command=$('commandInput').value.trim();
+ if(!target||!command){setNotice('Choose a target and enter a command.','error');return;}
+ if(!computers.some(c=>c.name===target&&c.connected)){setNotice('The selected computer is offline. Refresh and choose an online client.','error');return;}
+ if(!confirm('Send this command to '+target+'?\n\n'+command))return;
+ busy=true;$('sendBtn').disabled=true;setNotice('Sending command…');
+ try{await api('/api/send',{method:'POST',body:JSON.stringify({script:target,command})});setNotice('Command sent to '+target+'.','ok');$('commandInput').value='';await refreshData();}
+ catch(error){setNotice(error.message,'error');}
+ finally{busy=false;updateTargetStatus();}
 });
-
-// PREVENT RELOAD IF BLOCKED
-window.addEventListener('beforeunload', (e) => {
-  if (isAccessDenied) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
-
-// PREVENT BACK BUTTON
-history.pushState(null, null, location.href);
-window.addEventListener('popstate', () => {
-  history.pushState(null, null, location.href);
-});
+if(adminKey){$('apiKeyInput').value=adminKey;authenticate(adminKey).catch(error=>{$('loginWrap').classList.remove('hidden');$('loginError').textContent=error.message;});}
+else{$('loginWrap').classList.remove('hidden');}
+setInterval(()=>{if(adminKey&&!document.hidden)refreshData();},15000);
 </script>
-
 </body>
 </html>

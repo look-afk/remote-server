@@ -25,12 +25,12 @@ log = logging.getLogger("rc")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
 SECRET_KEY = os.getenv("SECRET_KEY", "")  # НЕ хардкодить! Обязателен через переменную окружения
-PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com")
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://remote-server-mr8v.onrender.com").rstrip("/")
 PORT = int(os.getenv("PORT", 8080))
 UPDATE_VERSION = int(os.getenv("UPDATE_VERSION", "1"))
 UPDATE_EXE_URL = os.getenv("UPDATE_EXE_URL", "")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")  # REQUIRED, separate from SECRET_KEY — no fallback
-PANEL_URL = PUBLIC_URL.rstrip("/") + "/admin"
+PANEL_URL = "https://remote-server-mr8v.onrender.com/admin"
 GROUPS_FILE = Path(os.getenv("GROUPS_FILE", "remote_groups.json"))
 AUDIT_FILE = Path(os.getenv("AUDIT_FILE", "audit.log"))
 
@@ -233,16 +233,24 @@ def plugin_commands_for(pc_name: str) -> set[str]:
     }
 
 
+PLUGIN_CATALOG_URL = "https://look-afk.github.io/pcrc-plugins/"
+
+
 def format_plugins(pc_name: str) -> str:
     plugins = client_plugins.get(pc_name, [])
     if not plugins:
-        return f"No plugin information received from {pc_name} yet. Make sure the client is online and has loaded its plugins."
-    lines = [f"Plugins on {pc_name}:"]
-    for plugin in plugins:
-        commands = ", ".join(plugin.get("commands", [])) or "no commands"
-        description = f" — {plugin['description']}" if plugin.get("description") else ""
-        lines.append(f"• {plugin['name']} v{plugin['version']}{description}\n  Commands: {commands}")
-    lines.append("\nSend a command name with its arguments to run it on your bound computer.")
+        lines = [
+            f"No plugin information received from {pc_name} yet.",
+            "Make sure the client is online and has loaded its plugins.",
+        ]
+    else:
+        lines = [f"Plugins on {pc_name}:"]
+        for plugin in plugins:
+            commands = ", ".join(plugin.get("commands", [])) or "no commands"
+            description = f" — {plugin['description']}" if plugin.get("description") else ""
+            lines.append(f"• {plugin['name']} v{plugin['version']}{description}\n  Commands: {commands}")
+        lines.append("\nSend a command name with its arguments to run it on your bound computer.")
+    lines.append(f"\nMore plugins and installation: {PLUGIN_CATALOG_URL}")
     return "\n".join(lines)[:3900]
 
 # pc_name -> session metadata. The WebSocket itself is still owned by ClientRegistry.
@@ -508,6 +516,53 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
         if client_name:
             registry.disconnect(client_name, ws)
     return ws
+
+
+
+async def tg_guide(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the public command guide and the relevant Telegram command list."""
+    user_id = update.effective_user.id if update.effective_user else 0
+    guide_url = f"{PUBLIC_URL}/guide"
+    if user_id in ADMIN_IDS:
+        summary = (
+            "Admin commands:\\n"
+            "/start — main menu\\n/guide — command guide\\n/panel — web admin panel\\n"
+            "/scripts, /online, /offline — computer status\\n"
+            "/send <computer> <command> — send command\\n"
+            "/broadcast <command> — send to online computers\\n"
+            "/sessions, /users — sessions and linked users\\n"
+            "/bind, /unbind — manage user bindings\\n"
+            "/pair <computer> — issue one-time pairing code\\n"
+            "/claim <code> — claim a pairing code\\n"
+            "/remove <computer> — remove an offline computer\\n"
+            "/group, /groups, /renamegroup — manage groups\\n"
+            "/moderator, /moderators, /modremove — manage moderators\\n\\n"
+            f"Full client command reference: {guide_url}"
+        )
+    elif user_groups(user_id):
+        summary = (
+            "Moderator commands:\\n"
+            "/guide — command guide\\n/groups, /scripts, /online, /offline — group and computer status\\n"
+            "/send <group> <computer> <command> — send an allowed command\\n"
+            "/broadcast <group> <command> — broadcast an allowed command\\n\\n"
+            f"Full client command reference: {guide_url}"
+        )
+    elif user_bindings.get(user_id):
+        summary = (
+            "User commands:\\n"
+            "/guide — command guide\\n"
+            "Use the menu for Screenshot, Lock screen, System info, Battery, Restart, and Power off.\\n"
+            "Tap Plugins to see plugin commands available on your computer.\\n\\n"
+            f"Full client command reference: {guide_url}"
+        )
+    else:
+        summary = (
+            "Command guide:\\n"
+            "/guide — show this guide\\n"
+            "/claim <code> — connect your account using a one-time code from the admin.\\n\\n"
+            f"Full guide: {guide_url}"
+        )
+    await update.effective_message.reply_text(summary, disable_web_page_preview=True)
 
 
 async def tg_start_v2(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1290,6 +1345,17 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+
+async def h_index(request: web.Request) -> web.Response:
+    """Serve the public command guide at / and /guide."""
+    index_path = Path(__file__).resolve().with_name("index.html")
+    try:
+        html = index_path.read_text(encoding="utf-8")
+    except OSError:
+        return web.Response(text="PCRC command guide is unavailable.", status=503)
+    return web.Response(text=html, content_type="text/html", charset="utf-8")
+
+
 async def h_keepalive_ping(request: web.Request) -> web.Response:
     return web.Response(text="OK")
 
@@ -1630,7 +1696,15 @@ async def h_download(request: web.Request) -> web.Response:
 
 
 async def h_admin(request: web.Request) -> web.Response:
-    return web.Response(text=ADMIN_HTML, content_type="text/html")
+    # Serve the standalone HTML so the deployed panel stays in sync with the
+    # latest admin_panel.html in the repository. Keep the embedded version as
+    # a compatibility fallback if the file is missing from an older deploy.
+    html_path = Path(__file__).resolve().with_name("admin_panel.html")
+    try:
+        html = html_path.read_text(encoding="utf-8")
+    except OSError:
+        html = ADMIN_HTML
+    return web.Response(text=html, content_type="text/html")
 
 
 async def main() -> None:
@@ -1654,7 +1728,7 @@ async def main() -> None:
     if BOT_TOKEN:
         tg_app = Application.builder().token(BOT_TOKEN).build()
         for cmd, handler in [
-            ("start", tg_start_v2), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
+            ("start", tg_start_v2), ("guide", tg_guide), ("plugins", tg_plugins), ("send", tg_send), ("broadcast", tg_broadcast),
             ("scripts", tg_scripts), ("online", tg_online), ("offline", tg_offline),
             ("remove", tg_remove), ("sessions", tg_sessions), ("users", tg_users), ("bind", tg_bind),
             ("unbind", tg_unbind), ("panel", tg_panel),
@@ -1676,7 +1750,8 @@ async def main() -> None:
         log.warning("BOT_TOKEN not set")
 
     app = web.Application()
-    app.router.add_get("/", h_keepalive_ping)
+    app.router.add_get("/", h_index)
+    app.router.add_get("/guide", h_index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/admin", h_admin)
     app.router.add_get("/api/status", h_status)

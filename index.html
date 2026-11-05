@@ -1,189 +1,281 @@
-# PCRC Installer — всё по-настоящему "скачал и заработало"
-# Качает ГОТОВЫЙ exe (не исходники), спрашивает имя и ключ прямо в терминале,
-# сам пишет config.json и сам добавляет себя в автозагрузку.
-#
-# Запуск:
-#   irm https://raw.githubusercontent.com/look-afk/remote-server/main/install.ps1 | iex
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#09090b">
+<link rel="icon" href="https://raw.githubusercontent.com/look-afk/pcrc-client/master/assets/icon.ico" type="image/x-icon">
+<title>PCRC — Command Guide</title>
+<style>
+:root{color-scheme:dark;--bg:#09090b;--panel:#111113;--hov:#18181b;--line:#27272a;--tx:#fafafa;--mu:#a1a1aa;--or:#a855f7;--or-soft:#c084fc;--or-bg:rgba(168,85,247,.12);--warn:#c084fc}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--or-soft);transition:color .2s ease}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+:focus-visible{outline:2px solid var(--or);outline-offset:3px}
+[hidden]{display:none!important}
+.w{max-width:1200px;margin:0 auto;padding:0 28px}
+.top{display:flex;justify-content:space-between;align-items:center;height:76px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px}
+.brand img{width:34px;height:34px;object-fit:contain}
+.brand small{display:block;font-size:11px;letter-spacing:.14em;color:var(--mu);font-weight:500}
+.btn{display:inline-flex;align-items:center;font:inherit;font-weight:500;color:var(--tx);background:transparent;border:1px solid var(--line);border-radius:8px;padding:10px 18px;text-decoration:none;cursor:pointer}
+.btn{transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}
+.btn:hover{border-color:var(--or);transform:translateY(-1px)}
+.btn.light{background:#fff;color:#000;border-color:#fff}
+.hero{padding:64px 0 40px}
+h1{margin:0;font-weight:400;font-size:clamp(38px,6.4vw,76px);line-height:1.08;letter-spacing:-.025em}
+h1 em{font-style:normal;color:var(--or-soft)}
+.lead{max-width:720px;margin:20px 0 0;color:var(--mu);font-size:18px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:32px}
+.bar input{flex:1 1 320px;max-width:560px;height:54px;padding:0 18px;font:inherit;font-size:18px;color:var(--tx);background:#000;border:1px solid var(--line);border-radius:8px}
+.bar input:focus{border-color:var(--or);outline:none;box-shadow:0 0 0 3px var(--or-bg)}
+.bar .btn{height:54px;padding:0 24px}
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:48px;align-items:start;padding-bottom:64px}
+aside{position:sticky;top:24px;display:flex;flex-direction:column;gap:4px;padding:8px;background:transparent}
+aside a{display:flex;justify-content:space-between;gap:10px;padding:11px 13px;border-radius:9px;color:var(--mu);text-decoration:none;font-size:16px;line-height:1.45}
+aside a{transition:background .2s ease,color .2s ease}
+aside a:hover,aside a.on{background:var(--or-bg);color:var(--or-soft)}
+aside small{color:#71717a}
+.sec{margin-bottom:44px;scroll-margin-top:24px;animation:sectionIn .45s ease both}
+@keyframes sectionIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sec h2{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;font-size:24px;font-weight:600}
+.sec h2 small{color:var(--mu);font-size:14px;font-weight:400}
+ul{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+li{display:grid;grid-template-columns:minmax(200px,36%) 1fr auto;gap:6px 20px;align-items:baseline;padding:12px 18px;border-top:1px solid var(--line)}
+li:first-child{border-top:0}
+li{transition:background .18s ease,border-color .18s ease}
+li:hover{background:var(--hov)}
+li.warn{box-shadow:inset 3px 0 var(--warn)}
+li>code{font-size:14px;overflow-wrap:anywhere}
+li>code b{color:var(--tx);font-weight:600}
+li>code span{color:var(--mu)}
+li p{margin:0;color:#c4c4cc;font-size:14.5px}
+li p code{background:#000;padding:1px 6px;border-radius:5px;font-size:13px}
+.act{display:flex;gap:8px;align-items:center}
+.act em{font-style:normal;font-size:12px;color:var(--warn);border:1px solid rgba(168,85,247,.45);background:rgba(168,85,247,.12);border-radius:999px;padding:1px 10px}
+.act button{font:inherit;font-size:12px;color:var(--mu);background:transparent;border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;opacity:0;transition:opacity .18s ease,color .18s ease,border-color .18s ease,background .18s ease}
+.act button:hover{color:var(--or-soft);border-color:var(--or);background:var(--or-bg)}
+li:hover .act button,.act button:focus-visible{opacity:1}
+@media(hover:none){.act button{opacity:1}}
+html{scroll-behavior:smooth}
+::selection{background:rgba(168,85,247,.3);color:#fff}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+.note{margin-top:14px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;color:var(--mu);font-size:14px}
+.empty{padding:48px 0;text-align:center;color:var(--mu)}
+footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--mu);font-size:14px}
+@media(max-width:900px){.layout{grid-template-columns:1fr;gap:16px}aside{position:sticky;top:0;z-index:5;width:100%;flex-direction:row;overflow-x:auto;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line)}aside a{flex:none;white-space:nowrap}}
+@media(max-width:700px){.w{padding:0 16px}li{grid-template-columns:1fr auto}li p{grid-column:1/-1}.hero{padding-top:40px}}
+</style>
+</head>
+<body>
+<div class="w">
+<header class="top"><div class="brand"><img src="https://raw.githubusercontent.com/look-afk/pcrc-client/master/assets/icon.ico" alt="PCRC logo"><div>PCRC / REMOTE CONTROL<small>COMMAND GUIDE</small></div></div><a class="btn light" href="/admin">Admin panel ↗</a></header>
+<section class="hero">
+<h1><em>Command</em> guide</h1>
+<p class="lead">Справочник команд клиента. Команды выполняются на выбранном компьютере через Telegram или административную панель. Доступные действия зависят от версии клиента и установленных плагинов.</p>
+<div class="bar"><input id="f" type="search" placeholder="Поиск команды или описания… ( / )" aria-label="Поиск команды" autocomplete="off"><a class="btn light" href="/guide">Открыть справочник</a><a class="btn" href="#telegram">Команды Telegram</a></div>
+</section>
 
-$ErrorActionPreference = "Stop"
-$ZipUrl     = "https://github.com/look-afk/pcrc-versions/releases/latest/download/RemoteControl-release.zip"
-$InstDir    = "$env:USERPROFILE\PCRC"
-$BackupRoot = "$env:LOCALAPPDATA\PCRC_Backups"
-$Timestamp  = Get-Date -Format "yyyyMMdd_HHmmss"
+<div class="layout">
+<aside id="nav" aria-label="Разделы"></aside>
+<main id="main">
 
-function Write-Step($n, $msg) { Write-Host ""; Write-Host "  [$n] $msg" -ForegroundColor Cyan }
-function Write-Ok($msg)   { Write-Host "      OK  $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "      >>  $msg" -ForegroundColor Yellow }
-function Write-Err($msg)  { Write-Host "      !!  $msg" -ForegroundColor Red }
+<section class="sec"><h2>Экран и мышь</h2><ul>
+<li><code>screenshot</code><p>Сделать скриншот всего экрана.</p></li>
+<li><code>screenshot_region x y w h</code><p>Скриншот выбранной области.</p></li>
+<li><code>screen_size</code><p>Разрешение экрана.</p></li>
+<li><code>mouse_move x y</code><p>Переместить курсор.</p></li>
+<li><code>mouse_click [x y] [right|double]</code><p>Щелчок мышью.</p></li>
+<li><code>mouse_scroll n</code><p>Прокрутка колёсика.</p></li>
+<li><code>mouse_pos</code><p>Текущие координаты курсора.</p></li>
+<li><code>mouse_drag x1 y1 x2 y2</code><p>Перетащить мышью.</p></li>
+</ul></section>
 
-Write-Host ""
-Write-Host "  ================================" -ForegroundColor Blue
-Write-Host "   PCRC Installer" -ForegroundColor White
-Write-Host "  ================================" -ForegroundColor Blue
+<section class="sec"><h2>Клавиатура</h2><ul>
+<li><code>type_text text</code><p>Ввести текст.</p></li>
+<li><code>hotkey ctrl c</code><p>Нажать сочетание клавиш.</p></li>
+<li><code>press_key enter</code><p>Нажать одну клавишу.</p></li>
+<li><code>clipboard_get</code><p>Получить текст буфера обмена.</p></li>
+<li><code>clipboard_set text</code><p>Установить текст буфера.</p></li>
+<li><code>clipboard_history</code><p>История буфера, если поддерживается.</p></li>
+</ul></section>
 
-$StageDir      = "$env:TEMP\pcrc_stage_$Timestamp"
-$RenamedOldDir = "$InstDir`_old_$Timestamp"
-$SwapDone      = $false
-$PreviousBackupDir = $null
+<section class="sec"><h2>Файлы и папки</h2><ul>
+<li><code>pwd</code><p>Текущая рабочая папка.</p></li>
+<li><code>cd path</code><p>Изменить рабочую папку.</p></li>
+<li><code>ls [path]</code><p>Список файлов; также алиасы dir и sd.</p></li>
+<li><code>read_file path</code><p>Прочитать файл.</p></li>
+<li><code>write_file path | content</code><p>Записать содержимое файла.</p></li>
+<li><code>download_file path</code><p>Подготовить файл к скачиванию.</p></li>
+<li><code>create name | content</code><p>Создать файл.</p></li>
+<li><code>delete_file path</code><p>Удалить файл.</p></li>
+<li><code>copy_file src | dst</code><p>Копировать файл.</p></li>
+<li><code>move_file src | dst</code><p>Переместить файл.</p></li>
+<li><code>mkdir path</code><p>Создать папку.</p></li>
+<li><code>find_file pattern [path]</code><p>Найти файлы.</p></li>
+<li><code>recent_files</code><p>Недавно изменённые/использованные файлы.</p></li>
+<li><code>zip_folder path</code><p>Архивировать папку.</p></li>
+</ul></section>
 
-function Restore-OnFailure {
-    if ($SwapDone -and (Test-Path $RenamedOldDir)) {
-        Write-Err "Install failed after the swap — rolling back to the previous version."
-        try {
-            if (Test-Path $InstDir) { Remove-Item $InstDir -Recurse -Force -ErrorAction SilentlyContinue }
-            Rename-Item -Path $RenamedOldDir -NewName (Split-Path $InstDir -Leaf) -ErrorAction Stop
-            Write-Ok "Rolled back. Your previous install at $InstDir is untouched."
-        } catch {
-            Write-Err "Automatic rollback failed. Your previous install is safe at: $RenamedOldDir"
-        }
-    } elseif (Test-Path $RenamedOldDir) {
-        Write-Err "Install failed before completing. Your previous install is untouched at $InstDir"
-    } else {
-        Write-Err "Install failed. No existing install was found, so nothing needed rolling back."
+<section class="sec"><h2>Система и сеть</h2><ul>
+<li><code>status</code><p>Сводка о состоянии компьютера.</p></li>
+<li><code>sysinfo</code><p>Информация об ОС и оборудовании.</p></li>
+<li><code>cpu</code><p>Загрузка процессора.</p></li>
+<li><code>ram</code><p>Использование памяти.</p></li>
+<li><code>disk</code><p>Использование диска.</p></li>
+<li><code>uptime</code><p>Время работы системы.</p></li>
+<li><code>battery</code><p>Состояние батареи.</p></li>
+<li><code>temp</code><p>Температурные данные, если доступны.</p></li>
+<li><code>processes [n]</code><p>Список процессов.</p></li>
+<li><code>kill_process name</code><p>Завершить указанный процесс.</p></li>
+<li><code>whoami</code><p>Текущий пользователь.</p></li>
+<li><code>env</code><p>Переменные окружения.</p></li>
+<li><code>network</code><p>Сводка о сети.</p></li>
+<li><code>connections</code><p>Сетевые соединения.</p></li>
+<li><code>public_ip</code><p>Публичный IP.</p></li>
+<li><code>ping_host host</code><p>Проверить доступность узла.</p></li>
+<li><code>traceroute host</code><p>Маршрут до узла.</p></li>
+<li><code>wifi_list</code><p>Список Wi-Fi сетей.</p></li>
+<li><code>wifi_password</code><p>Информация о сохранённых Wi-Fi профилях — использовать только на своём устройстве с разрешением владельца.</p></li>
+</ul></section>
+
+<section class="sec"><h2>Приложения, звук и уведомления</h2><ul>
+<li><code>open_app path</code><p>Открыть приложение.</p></li>
+<li><code>open_url url</code><p>Открыть URL.</p></li>
+<li><code>close_app name</code><p>Закрыть приложение.</p></li>
+<li><code>list_windows</code><p>Список окон.</p></li>
+<li><code>notify message</code><p>Показать уведомление.</p></li>
+<li><code>msgbox text</code><p>Показать диалоговое окно.</p></li>
+<li><code>speak text</code><p>Озвучить текст.</p></li>
+<li><code>play_sound</code><p>Воспроизвести звук.</p></li>
+<li><code>volume n</code><p>Установить громкость.</p></li>
+</ul></section>
+
+<section class="sec"><h2>Питание и запуск команд</h2><ul>
+<li><code>shutdown [seconds]</code><p>Запланировать выключение.</p></li>
+<li><code>restart [seconds]</code><p>Перезагрузить компьютер.</p></li>
+<li><code>cancel_shutdown</code><p>Отменить запланированное выключение.</p></li>
+<li><code>sleep</code><p>Перевести компьютер в сон.</p></li>
+<li><code>lock</code><p>Заблокировать экран.</p></li>
+<li><code>shell command</code><p>Выполнить команду оболочки.</p></li>
+<li><code>powershell command</code><p>Выполнить команду PowerShell.</p></li>
+<li><code>run_script path</code><p>Запустить скрипт.</p></li>
+<li><code>help</code><p>Показать доступные команды клиента.</p></li>
+</ul></section>
+
+<section class="sec"><h2>Дополнительные команды клиента</h2><ul>
+<li><code>show_desktop</code><p>Показать рабочий стол.</p></li>
+<li><code>task_manager</code><p>Открыть диспетчер задач.</p></li>
+<li><code>close_all_apps</code><p>Закрыть открытые приложения; используйте осторожно.</p></li>
+<li><code>schedule_task</code><p>Управление запланированной задачей.</p></li>
+<li><code>disable_input [seconds]</code><p>Временно блокировать ввод. Используйте только на своём устройстве и с коротким тайм-аутом.</p></li>
+<li><code>set_wallpaper path</code><p>Установить обои.</p></li>
+<li><code>set_resolution width height</code><p>Изменить разрешение экрана.</p></li>
+<li><code>registry_read path</code><p>Прочитать значение реестра Windows.</p></li>
+<li><code>get_windows_key</code><p>Клиентская команда, связанная с Windows key/activation state; запускайте только с разрешения владельца.</p></li>
+<li><code>empty_recycle</code><p>Очистить корзину.</p></li>
+<li><code>add_startup</code><p>Добавить приложение в автозагрузку.</p></li>
+<li><code>remove_startup</code><p>Удалить приложение из автозагрузки.</p></li>
+<li><code>prank_update</code><p>Команда демонстрационного/пранк-сценария; используйте только на собственном устройстве с явным согласием.</p></li>
+<li><code>show_config</code><p>Показать сведения о конфигурации клиента; не публикуйте секреты.</p></li>
+<li><code>update_server</code><p>Изменить адрес сервера клиента.</p></li>
+<li><code>update_name</code><p>Изменить имя клиента.</p></li>
+<li><code>update_secret</code><p>Обновить секретный ключ клиента.</p></li>
+<li><code>version</code><p>Показать версию клиента.</p></li>
+<li><code>voice_mics</code><p>Список доступных микрофонов.</p></li>
+<li><code>voice_test</code><p>Проверить голосовую подсистему.</p></li>
+<li><code>check_update</code><p>Проверить наличие обновления.</p></li>
+<li><code>restart_update</code><p>Перезапустить клиент для применения обновления.</p></li>
+<li><code>uninstall</code><p>Удалить клиент; сначала убедитесь, что это нужный компьютер.</p></li>
+<li><code>hello</code><p>Тестовая команда.</p></li>
+<li><code>my_task</code><p>Показать доступные сведения о текущей задаче.</p></li>
+<li><code>dir</code><p>Алиас команды ls.</p></li>
+<li><code>sd</code><p>Алиас команды ls.</p></li>
+</ul></section>
+
+<section class="sec"><h2>Команды и плагины</h2><ul>
+<li><code>accept [file]</code><p>Поддерживается не во всех версиях клиента.</p></li>
+<li><code>plugin commands</code><p>Команды зависят от установленных плагинов; список запрашивается через Plugins в Telegram.</p></li>
+<li><code>/and</code><p>Цепочка команд: пример <code>screenshot /and notify Done</code>. Выполняйте только понятные и разрешённые действия.</p></li>
+</ul></section>
+
+<section class="sec" id="telegram"><h2>Telegram bot</h2><ul>
+<li><code>/start</code><p>Начало работы и меню пользователя.</p></li>
+<li><code><a href="/guide">/guide</a></code><p>Открывает этот справочник в браузере и показывает команды, доступные вашей роли.</p></li>
+<li><code>/panel</code><p>Ссылка на веб-панель администратора (для администраторов).</p></li>
+<li><code>/scripts, /online, /offline</code><p>Список компьютеров и статус.</p></li>
+<li><code>/send &lt;computer&gt; &lt;command&gt;</code><p>Отправить команду компьютеру (администратор).</p></li>
+<li><code>/broadcast &lt;command&gt;</code><p>Отправить команду всем онлайн-компьютерам (администратор).</p></li>
+<li><code>/sessions, /users</code><p>Сессии и привязанные пользователи.</p></li>
+<li><code>/bind, /unbind</code><p>Управление привязками.</p></li>
+<li><code>/pair &lt;computer&gt;, /claim &lt;code&gt;</code><p>Безопасное связывание через одноразовый код.</p></li>
+<li><code>/group, /groups, /renamegroup</code><p>Управление группами компьютеров.</p></li>
+<li><code>/moderator, /moderators, /modremove</code><p>Управление модераторами.</p></li>
+<li><code>/remove &lt;computer&gt;</code><p>Удалить из списка только отключённый компьютер.</p></li>
+</ul>
+<div class="note">Примечание: команды клиента определяются установленной версией и плагинами. На данный момент в клиентском реестре обнаружено 92 core command names/aliases; список выше отражает поддерживаемые имена, а некоторые команды могут иметь дополнительные аргументы.</div>
+</section>
+
+<div class="empty" id="empty" hidden>Ничего не найдено. Попробуйте другое слово.</div>
+</main>
+</div>
+<footer><div class="w" style="padding:0">PCRC · Command reference · <a href="https://github.com/look-afk/pcrc-client">Client repository</a></div></footer>
+</div>
+<script>
+const el = (t, txt, cls) => { const e = document.createElement(t); if (txt) e.textContent = txt; if (cls) e.className = cls; return e; };
+const WARN = /разреш|осторожно|только на своём|не публикуйте|сначала убедитесь|согласи/i;
+const nav = document.getElementById('nav'), secs = [...document.querySelectorAll('.sec')];
+
+secs.forEach((s, i) => {
+  s.id = s.id || 's' + (i + 1);
+  const rows = [...s.querySelectorAll('li')], title = s.querySelector('h2').textContent;
+  s.querySelector('h2').append(el('small', rows.length));
+  const a = el('a', title); a.href = '#' + s.id; a.append(el('small', rows.length)); nav.append(a);
+
+  rows.forEach(li => {
+    li.dataset.t = li.textContent.toLowerCase();            // для поиска, до добавления кнопок
+    const c = li.querySelector('code'), act = el('div', '', 'act');
+    if (!c.children.length && !c.textContent.includes(',')) {   // выделяем имя команды и аргументы
+      const t = c.textContent.trim(), k = t.indexOf(' ');
+      if (k > 0) { c.textContent = ''; c.append(el('b', t.slice(0, k)), el('span', t.slice(k))); }
     }
-    if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force -ErrorAction SilentlyContinue }
-}
+    if (WARN.test(li.querySelector('p').textContent)) { li.classList.add('warn'); act.append(el('em', 'осторожно')); }
+    const b = el('button', 'Копировать'); b.type = 'button';
+    b.onclick = async () => {
+      try { await navigator.clipboard.writeText(c.textContent.trim()); b.textContent = 'Скопировано'; }
+      catch { b.textContent = 'Не вышло'; }
+      setTimeout(() => b.textContent = 'Копировать', 1600);
+    };
+    act.append(b); li.append(act);
+  });
+});
 
-try {
-    # ── 1. Скачиваем готовый релиз (exe + GUI + plugins), без Python ──────────
-    Write-Step "1/5" "Скачиваем готовую сборку с GitHub..."
-    $TmpZip = "$env:TEMP\pcrc_release_$Timestamp.zip"
-    Invoke-WebRequest -Uri $ZipUrl -OutFile $TmpZip -UseBasicParsing
-    if (-not (Test-Path $TmpZip) -or (Get-Item $TmpZip).Length -lt 1024) {
-        throw "Downloaded archive looks empty or too small — aborting before touching any existing install."
-    }
-    Write-Ok "Скачано ($((Get-Item $TmpZip).Length) bytes)"
+const search = document.getElementById('f');
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    e.preventDefault(); search.focus();
+  }
+  if (e.key === 'Escape' && document.activeElement === search) {
+    search.value = ''; search.dispatchEvent(new Event('input')); search.blur();
+  }
+});
 
-    # ── 2. Распаковываем в staging-папку (ещё не трогаем InstDir) ─────────────
-    Write-Step "2/5" "Распаковываем во временную папку..."
-    New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
-    Expand-Archive -Path $TmpZip -DestinationPath $StageDir -Force
-    if (-not (Get-ChildItem $StageDir -Filter "RemoteControl.exe" -Recurse)) {
-        throw "RemoteControl.exe not found in the downloaded archive."
-    }
-    Write-Ok "Распаковано"
+document.getElementById('f').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim(); let total = 0;
+  secs.forEach((s, i) => {
+    let n = 0;
+    s.querySelectorAll('li').forEach(li => { const ok = li.dataset.t.includes(q); li.hidden = !ok; n += ok; });
+    s.hidden = !n; nav.children[i].hidden = !n; total += n;
+  });
+  document.getElementById('empty').hidden = total > 0;
+  document.getElementById('empty').textContent = q ? 'Ничего не найдено. Попробуйте другое слово или нажмите Esc, чтобы очистить поиск.' : 'Нет доступных команд.';
+});
 
-    # ── 3. Бэкап текущей установки, если есть + перенос старого config.json ──
-    Write-Step "3/5" "Проверяем предыдущую установку..."
-    $OldConfigPath = $null
-    if (Test-Path $InstDir) {
-        New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
-        $PreviousBackupDir = Join-Path $BackupRoot "backup_$Timestamp"
-        New-Item -ItemType Directory -Path $PreviousBackupDir -Force | Out-Null
-        Copy-Item "$InstDir\*" $PreviousBackupDir -Recurse -Force -ErrorAction Stop
-        Write-Ok "Резервная копия: $PreviousBackupDir"
-
-        $ExistingConfig = Join-Path $InstDir "config.json"
-        if (Test-Path $ExistingConfig) {
-            try {
-                $parsed = Get-Content $ExistingConfig -Raw | ConvertFrom-Json
-                if ($parsed.name -and $parsed.secret_key) {
-                    $OldConfigPath = $ExistingConfig
-                    Write-Ok "Найден рабочий config.json — переносим без повторных вопросов"
-                }
-            } catch {}
-        }
-
-        Get-ChildItem $BackupRoot -Directory | Sort-Object LastWriteTime -Descending |
-            Select-Object -Skip 5 | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-
-        Rename-Item -Path $InstDir -NewName (Split-Path $RenamedOldDir -Leaf) -ErrorAction Stop
-    } else {
-        Write-Ok "Предыдущей установки не найдено — это первая установка."
-    }
-    $SwapDone = $true
-
-    Move-Item -Path $StageDir -Destination $InstDir -ErrorAction Stop
-    Write-Ok "Установлено в $InstDir"
-
-    # ── 4. Имя и ключ — ПРЯМО В ТЕРМИНАЛЕ, без отдельного запуска exe ─────────
-    Write-Step "4/5" "Настройка"
-
-    if ($OldConfigPath) {
-        Copy-Item $OldConfigPath (Join-Path $InstDir "config.json") -Force
-        $cfg = Get-Content (Join-Path $InstDir "config.json") -Raw | ConvertFrom-Json
-        Write-Ok "Используем сохранённые имя и ключ: $($cfg.name)"
-    } else {
-        Write-Host ""
-        $pcName = Read-Host "      Имя этого ПК (например home_pc)"
-        while (-not $pcName.Trim()) {
-            Write-Warn "Имя не может быть пустым"
-            $pcName = Read-Host "      Имя этого ПК"
-        }
-
-        $secretSecure = Read-Host "      Secret key (узнать у того, кто поднимал сервер)" -AsSecureString
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secretSecure)
-        $secretPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        while (-not $secretPlain.Trim()) {
-            Write-Warn "Ключ не может быть пустым"
-            $secretSecure = Read-Host "      Secret key" -AsSecureString
-            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secretSecure)
-            $secretPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        }
-
-        $configObj = [ordered]@{
-            name       = $pcName.Trim()
-            server_url = "https://remote-server-mr8v.onrender.com"
-            secret_key = $secretPlain.Trim()
-            update_url = "https://raw.githubusercontent.com/look-afk/pcrc-versions/main"
-            voice      = @{
-                enabled = $true; language = "en-US"; mic_index = $null
-                timeout = 8; phrase_time_limit = 12; ambient_duration = 1.0
-                energy_threshold = $null; pause_threshold = 0.8
-                dynamic_energy = $true; tts_rate = 165; tts_voice_id = $null
-            }
-        }
-        # FIX: Set-Content -Encoding UTF8 on Windows PowerShell writes a UTF-8
-        # BOM at the start of the file. Python's json.loads() chokes on that
-        # BOM and throws, which client_final.py's load_config() silently
-        # swallowed — so the exe never saw the name/secret_key we just wrote
-        # and popped its own "First Setup" dialog right after this script
-        # finished. Writing without a BOM fixes it.
-        $jsonText = $configObj | ConvertTo-Json -Depth 5
-        [System.IO.File]::WriteAllText((Join-Path $InstDir "config.json"), $jsonText, (New-Object System.Text.UTF8Encoding($false)))
-        Write-Ok "config.json создан"
-    }
-
-    # ── 5. Автозагрузка — делаем сами, не дожидаясь первого запуска exe ───────
-    Write-Step "5/5" "Добавляем в автозагрузку..."
-    $exe     = Join-Path $InstDir "RemoteControl.exe"
-    $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\RemoteControl.lnk"
-    try {
-        $ws = New-Object -ComObject WScript.Shell
-        $sc = $ws.CreateShortcut($startup)
-        $sc.TargetPath       = $exe
-        $sc.WorkingDirectory = $InstDir
-        $sc.WindowStyle      = 7
-        $sc.Save()
-        Write-Ok "Добавлено в автозагрузку: $startup"
-    } catch {
-        Write-Warn "Не удалось добавить в автозагрузку: $($_.Exception.Message)"
-        Write-Warn "Можно добавить вручную позже командой внутри приложения: add_startup"
-    }
-
-    Remove-Item $TmpZip -Force -ErrorAction SilentlyContinue
-
-    Write-Host ""
-    Write-Host "  ================================" -ForegroundColor Green
-    Write-Host "   Готово! Запускаю..." -ForegroundColor White
-    Write-Host "  ================================" -ForegroundColor Green
-    Write-Host "  Папка: $InstDir" -ForegroundColor White
-    Write-Host ""
-
-    Start-Process -FilePath $exe -WorkingDirectory $InstDir
-
-    if (Test-Path $RenamedOldDir) {
-        if (-not (Test-Path $BackupRoot)) { New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null }
-        $FinalOldBackup = Join-Path $BackupRoot "preswap_$Timestamp"
-        Move-Item -Path $RenamedOldDir -Destination $FinalOldBackup -ErrorAction SilentlyContinue
-    }
-
-} catch {
-    Write-Err "Ошибка установки: $($_.Exception.Message)"
-    Restore-OnFailure
-    Write-Host ""
-    Write-Host "  Установка не завершена. Ничего не сломано — смотри сообщения выше." -ForegroundColor Yellow
-    exit 1
-}
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) nav.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.hash === '#' + e.target.id));
+}), { rootMargin: '-15% 0px -75% 0px' });
+secs.forEach(s => io.observe(s));
+</script>
+</body>
+</html>
