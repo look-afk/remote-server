@@ -1346,6 +1346,11 @@ async def tg_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 
+async def h_plugin_catalog(request: web.Request) -> web.Response:
+    """Redirect the short /plugin URL to the public plugin catalogue."""
+    raise web.HTTPFound(PLUGIN_CATALOG_URL)
+
+
 async def h_index(request: web.Request) -> web.Response:
     """Serve the public command guide at / and /guide."""
     index_path = Path(__file__).resolve().with_name("index.html")
@@ -1751,6 +1756,8 @@ async def main() -> None:
 
     app = web.Application()
     app.router.add_get("/", h_index)
+    app.router.add_get("/plugin", h_plugin_catalog)
+    app.router.add_get("/plugin/", h_plugin_catalog)
     app.router.add_get("/guide", h_index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/admin", h_admin)
